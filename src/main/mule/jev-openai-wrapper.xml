@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+  <!-- OpenAI-compatible chat completions in front of Typesafe Jev (decides the tool call) and a fallback chat model (writes the text). -->
+  <configuration-properties file="config.yaml" doc:name="Defaults (no secrets)"/>
+
+  <http:listener-config name="api-listener" doc:name="HTTP listener">
+    <http:listener-connection host="0.0.0.0" port="${http.port}"/>
+  </http:listener-config>
+
+  <http:request-config name="openrouter" doc:name="OpenRouter" basePath="${openrouter.basePath}" responseTimeout="${openrouter.timeoutMs}">
+    <http:request-connection protocol="HTTPS" host="${openrouter.host}" port="443" connectionIdleTimeout="30000"/>
+    <http:default-headers>
+      <http:default-header key="Authorization" value="Bearer ${openrouter.apiKey}"/>
+      <http:default-header key="Content-Type" value="application/json"/>
+      <http:default-header key="X-Title" value="Mule4 Jev wrapper for OpenAI"/>
+    </http:default-headers>
+  </http:request-config>
+
+  <!-- GET /health: liveness, no upstream call. -->
+  <flow name="health">
+    <http:listener config-ref="api-listener" path="/health" allowedMethods="GET"/>
+    <set-payload value='#[output application/json --- { status: "ok", jev: p("jev.model"), fallback: p("fallback.model") }]'/>
+  </flow>
+
+  <!-- GET /v1/models: the models a client can ask for. -->
+  <flow name="models">
+    <http:listener config-ref="api-listener" path="/v1/models" allowedMethods="GET"/>
+    <set-payload value='#[output application/json --- { object: "list", data: [ { id: "jev-wrapper", object: "model", created: 1794600000, owned_by: "typesafe-jev+" ++ p("fallback.model") }, { id: p("fallback.model"), object: "model", created: 1794600000, owned_by: "openrouter" } ] }]'/>
+  </flow>
+
+  <!-- Anything else: log the method and path (shows what a client really calls) and answer 404 the OpenAI way. -->
+  <flow name="not-found">
+    <http:listener config-ref="api-listener" path="/*">
+      <http:response statusCode="404"/>
+    </http:listener>
+    <logger level="WARN" message="#['Not handled: ' ++ attributes.method ++ ' ' ++ attributes.requestPath]"/>
+    <set-payload value='#[output application/json --- { error: { message: "Not found: " ++ attributes.method ++ " " ++ attributes.requestPath ++ ". This wrapper serves POST /v1/chat/completions and GET /v1/models.", "type": "invalid_request_error", code: "not_found" } }]'/>
+  </flow>
+
+  <!-- POST /v1/chat/completions -->
+  <flow name="chat-completions">
+    <http:listener config-ref="api-listener" path="/v1/chat/completions" allowedMethods="POST">
+      <http:response statusCode="#[vars.httpStatus default 200]">
+        <http:headers><![CDATA[#[{ "x-jev-decision": vars.decisionHeader default "none" }]]]></http:headers>
+      </http:response>
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body><![CDATA[#[payload]]]></http:body>
+      </http:error-response>
+    </http:listener>
+
+    <!-- Caller key (optional): Authorization: Bearer <wrapper.apiKey>. -->
+    <choice doc:name="Caller key">
+      <when expression="#[!isEmpty(p('wrapper.apiKey')) and ((attributes.headers.authorization default '') != ('Bearer ' ++ p('wrapper.apiKey')))]">
+        <set-variable variableName="httpStatus" value="#[401]"/>
+        <set-variable variableName="errType" value="invalid_request_error"/>
+        <set-variable variableName="errCode" value="invalid_api_key"/>
+        <set-variable variableName="errMessage" value="Invalid or missing API key for the Jev wrapper."/>
+        <raise-error type="APP:UNAUTHORIZED" description="Invalid or missing API key"/>
+      </when>
+    </choice>
+
+    <set-variable variableName="req" value="#[payload]" mimeType="application/json" doc:name="OpenAI request"/>
+    <choice doc:name="Valid request">
+      <when expression="#[!(vars.req.messages is Array) or sizeOf(vars.req.messages default []) == 0]">
+        <set-variable variableName="httpStatus" value="#[400]"/>
+        <set-variable variableName="errType" value="invalid_request_error"/>
+        <set-variable variableName="errMessage" value="messages must be a non-empty array."/>
+        <raise-error type="APP:BAD_REQUEST" description="messages missing"/>
+      </when>
+    </choice>
+
+    <!-- Jev decides only when there are tools and the caller left the choice open (auto / required / unset). -->
+    <choice doc:name="Ask Jev?">
+      <when expression="#[p('jev.enabled') == 'true' and sizeOf(vars.req.tools default []) > 0 and (vars.req.tool_choice == null or vars.req.tool_choice == 'auto' or vars.req.tool_choice == 'required')]">
+        <ee:transform doc:name="Jev request">
+          <ee:variables><ee:set-variable variableName="jevBody" resource="dwl/jev-request.dwl"/></ee:variables>
+        </ee:transform>
+        <try doc:name="Jev decision">
+          <http:request method="POST" config-ref="openrouter" path="${jev.path}" doc:name="Jev (OpenRouter Decisions)">
+            <http:body><![CDATA[#[vars.jevBody]]]></http:body>
+          </http:request>
+          <set-variable variableName="jev" value="#[payload]" mimeType="application/json"/>
+          <error-handler>
+            <on-error-continue doc:name="Jev failed: fallback decides">
+              <set-variable variableName="jevError" value="#[(error.errorType.identifier default 'ERROR') ++ ' ' ++ ((error.errorMessage.payload.error.message default error.description) default '')]"/>
+              <logger level="WARN" message="#['Jev decision failed, the fallback model decides: ' ++ vars.jevError]"/>
+            </on-error-continue>
+          </error-handler>
+        </try>
+        <ee:transform doc:name="Decision">
+          <ee:variables><ee:set-variable variableName="decision" resource="dwl/decide.dwl"/></ee:variables>
+        </ee:transform>
+      </when>
+      <otherwise>
+        <set-variable variableName="decision" value='#[{ action: "passthrough", reason: "no tools or tool_choice set by the caller" }]'/>
+      </otherwise>
+    </choice>
+    <set-variable variableName="decisionHeader" value="#[vars.decision.action ++ (if (vars.decision.tool != null) ':' ++ vars.decision.tool else '') ++ (if (vars.decision.confidence != null) ';confidence=' ++ (vars.decision.confidence as String) else '')]"/>
+    <logger level="INFO" message="#['decision ' ++ write(vars.decision, 'application/json', {indent: false})]"/>
+
+    <!-- The fallback chat model writes the reply: forced to Jev's tool, told not to call one, or free (auto). -->
+    <ee:transform doc:name="Fallback request">
+      <ee:variables><ee:set-variable variableName="fallbackBody" resource="dwl/fallback-request.dwl"/></ee:variables>
+    </ee:transform>
+    <http:request method="POST" config-ref="openrouter" path="/v1/chat/completions" doc:name="Fallback model (OpenRouter)">
+      <http:body><![CDATA[#[vars.fallbackBody]]]></http:body>
+      <http:response-validator>
+        <http:success-status-code-validator values="0..599"/>
+      </http:response-validator>
+    </http:request>
+
+    <choice doc:name="Upstream error?">
+      <when expression="#[attributes.statusCode >= 400]">
+        <set-variable variableName="httpStatus" value="#[attributes.statusCode]"/>
+        <set-payload value="#[output application/json --- { error: { message: (payload.error.message default 'Upstream model error') as String, &quot;type&quot;: 'upstream_error', code: payload.error.code default attributes.statusCode } }]"/>
+      </when>
+      <when expression="#[vars.req.stream == true]">
+        <ee:transform doc:name="OpenAI response"><ee:message><ee:set-payload resource="dwl/openai-response.dwl"/></ee:message></ee:transform>
+        <ee:transform doc:name="As SSE chunks"><ee:message><ee:set-payload resource="dwl/openai-stream.dwl"/></ee:message></ee:transform>
+        <set-payload value="#[payload]" mimeType="text/event-stream"/>
+      </when>
+      <otherwise>
+        <ee:transform doc:name="OpenAI response"><ee:message><ee:set-payload resource="dwl/openai-response.dwl"/></ee:message></ee:transform>
+      </otherwise>
+    </choice>
+
+    <error-handler>
+      <on-error-propagate doc:name="OpenAI-style error">
+        <ee:transform doc:name="Error body"><ee:message><ee:set-payload resource="dwl/error.dwl"/></ee:message></ee:transform>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+</mule>

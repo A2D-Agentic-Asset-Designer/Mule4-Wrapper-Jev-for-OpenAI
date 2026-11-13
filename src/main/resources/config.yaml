@@ -1,0 +1,25 @@
+# Non-secret defaults. Set the secrets as deployment (secure) properties, never in this file:
+#   openrouter.apiKey  OpenRouter key (sk-or-v1-...)
+#   wrapper.apiKey     The key callers (the broker) must send as "Authorization: Bearer <key>". Empty = no check.
+http:
+  port: "8081"
+openrouter:
+  host: "openrouter.ai"
+  basePath: "/api"
+  apiKey: ""
+  timeoutMs: "120000"
+jev:
+  enabled: "true"
+  model: "~typesafe/jev-latest"
+  path: "/alpha/decisions"
+  # Below this confidence the fallback model decides on its own (tool_choice auto).
+  minConfidence: "0.5"
+  # How many of the last messages Jev sees, and how many characters per message.
+  maxMessages: "12"
+  maxChars: "2000"
+fallback:
+  # Chat model on OpenRouter that writes the text and the tool arguments.
+  # A request model with a "/" (an OpenRouter id, e.g. openai/gpt-4o-mini) is used instead.
+  model: "openai/gpt-4o-mini"
+wrapper:
+  apiKey: ""

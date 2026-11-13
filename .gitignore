@@ -1,0 +1,10 @@
+target/
+.mule/
+.idea/
+.vscode/
+.DS_Store
+*.key
+.env
+.envrc
+local.properties
+deploy.local.*
