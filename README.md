@@ -131,4 +131,6 @@ Never commit keys. `.gitignore` excludes `*.key`, `.env`, `.envrc` and `local.pr
 - `v1-library-loans` (v1, A2A 0.3.0): a library broker with a catalog MCP (search_books, place_hold) and two agents (membership, recommendations).
 - `v2-restaurant-booking` (v2, AgentScript, A2A 1.0): a booking broker with a tables MCP (find_table, book_table) and two agents (menu allergies, loyalty).
 
+Each project has a README with deploy steps and tested example prompts: [v1-library-loans](examples/v1-library-loans/README.md), [v2-restaurant-booking](examples/v2-restaurant-booking/README.md).
+
 Deploy one with `anypoint-cli-v4 agent-network project deploy --path examples/<project> -g <gateway> --property jev.apiKey:<wrapper key>`, plus the other variables in its `exchange.json`.
