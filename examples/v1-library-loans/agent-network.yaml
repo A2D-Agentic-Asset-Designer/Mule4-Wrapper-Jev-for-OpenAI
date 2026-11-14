@@ -1,0 +1,183 @@
+schemaVersion: 1.0.0
+label: Jev Library Loans
+brokers:
+  jev_lib1_library-broker:
+    card:
+      protocolVersion: 0.3.0
+      name: jev_lib1_library-broker
+      description: Library members ask for a book; the broker searches the catalog, checks the member and places a hold or suggests similar books. Its LLM is the Jev OpenAI wrapper.
+      url: ${ingressgw.url}/jev_lib1_library-broker
+      version: 1.0.0
+      capabilities:
+        streaming: false
+        pushNotifications: false
+        stateTransitionHistory: false
+      defaultInputModes:
+        - application/json
+        - text/plain
+      defaultOutputModes:
+        - application/json
+        - text/plain
+      skills:
+        - id: borrow-book
+          name: Borrow a Book
+          description: Find a book and borrow or hold it for a member.
+          tags:
+            - library
+          examples:
+            - I am member M-501, is Dune available?
+            - Member M-666 wants to hold The Hobbit
+    spec:
+      llm:
+        ref:
+          name: jev_lib1_jev
+        configuration:
+          model: openai/gpt-4o-mini
+      instructions:
+        - You help library members borrow books.
+        - Search the catalog with search_books using the title or author from the request.
+        - Ask the Library Membership agent whether the member (for example M-501) may borrow or hold books.
+        - When the book is not available and the member is in good standing, place a hold with place_hold and give the hold id and queue position.
+        - When the member is blocked, say why and do not place a hold.
+        - When the member asks for ideas, ask the Book Recommendation agent for similar books.
+      links:
+        - agent:
+            ref:
+              name: jev_lib1_membership-agent
+        - agent:
+            ref:
+              name: jev_lib1_recommendation-agent
+      tools:
+        - mcp:
+            ref:
+              name: jev_lib1_catalog-mcp
+            allowed:
+              - search_books
+              - place_hold
+      maxNumberOfLoops: 15
+      maxConsecutiveErrors: 3
+      taskTimeoutSecs: 120
+llmProviders:
+  jev_lib1_jev:
+    label: Jev OpenAI Wrapper
+    description: Mule 4 wrapper with the OpenAI Chat Completions API; Jev (OpenRouter) decides the tool call.
+    metadata:
+      platform: OpenAI
+      models:
+        - openai/gpt-4o-mini
+connections:
+  jev-lib1-llm-connection:
+    kind: llm
+    ref:
+      name: jev_lib1_jev
+    spec:
+      url: ${jevWrapper.url}
+      configuration:
+        apiKey: ${jev.apiKey}
+        timeout: 600000
+  jev-lib1-catalog-mcp-connection:
+    kind: mcp
+    ref:
+      name: jev_lib1_catalog-mcp
+    spec:
+      url: ${catalogMcp.url}
+  jev-lib1-membership-agent-connection:
+    kind: agent
+    ref:
+      name: jev_lib1_membership-agent
+    spec:
+      url: ${membershipAgent.url}
+  jev-lib1-recommendation-agent-connection:
+    kind: agent
+    ref:
+      name: jev_lib1_recommendation-agent
+    spec:
+      url: ${recommendationAgent.url}
+mcpServers:
+  jev_lib1_catalog-mcp:
+    label: Library Catalog MCP
+    description: "Library catalog: search books and place holds."
+    metadata:
+      transport:
+        kind: streamableHttp
+        path: /mcp
+      tools:
+        - name: search_books
+          description: Search the library catalog by title or author. Returns matching books with availability.
+          inputSchema:
+            type: object
+            properties:
+              query:
+                type: string
+                description: Title or author words, e.g. dune
+            required:
+              - query
+        - name: place_hold
+          description: Place a hold on a book for a member. Use when the book is not available now.
+          inputSchema:
+            type: object
+            properties:
+              book_id:
+                type: string
+                description: Book id, e.g. BK-1001
+              member_id:
+                type: string
+                description: Member id, e.g. M-501
+            required:
+              - book_id
+              - member_id
+agents:
+  jev_lib1_membership-agent:
+    label: Library Membership Agent
+    description: "Checks a library member: status, fines and loan limit."
+    metadata:
+      platform: MuleSoft
+      protocol: a2a
+    card:
+      name: Jev Library Membership Agent
+      description: "Checks a library member: status, fines and loan limit."
+      url: ${membershipAgent.url}
+      protocolVersion: 0.3.0
+      version: 1.0.0
+      capabilities:
+        streaming: false
+        pushNotifications: false
+      defaultInputModes:
+        - text/plain
+      defaultOutputModes:
+        - text/plain
+      skills:
+        - id: check-member
+          name: Check Member
+          description: Say whether a member may borrow or hold books.
+          tags:
+            - library
+          examples:
+            - Can member M-501 place a hold?
+  jev_lib1_recommendation-agent:
+    label: Book Recommendation Agent
+    description: Suggests similar books a member may like.
+    metadata:
+      platform: MuleSoft
+      protocol: a2a
+    card:
+      name: Jev Book Recommendation Agent
+      description: Suggests similar books a member may like.
+      url: ${recommendationAgent.url}
+      protocolVersion: 0.3.0
+      version: 1.0.0
+      capabilities:
+        streaming: false
+        pushNotifications: false
+      defaultInputModes:
+        - text/plain
+      defaultOutputModes:
+        - text/plain
+      skills:
+        - id: recommend
+          name: Recommend Books
+          description: Recommend books similar to a title.
+          tags:
+            - library
+          examples:
+            - Books like Dune

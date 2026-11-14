@@ -4,7 +4,7 @@
   <!-- groupId must be your Anypoint organization id to publish to Exchange: pass -DgroupId=<org id> or edit it. -->
   <groupId>${groupId}</groupId>
   <artifactId>jev-openai-wrapper</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1</version>
   <packaging>mule-application</packaging>
   <name>Jev wrapper for OpenAI</name>
   <description>OpenAI-compatible /v1/chat/completions: Typesafe Jev (via OpenRouter) decides the tool call, a fallback chat model writes the text.</description>

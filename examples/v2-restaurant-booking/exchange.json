@@ -1,0 +1,21 @@
+{
+  "main": "agent-network.yaml",
+  "name": "jev-restaurant-booking-v2",
+  "classifier": "agentic-network",
+  "descriptorVersion": "1.0.0",
+  "apiVersion": "v1",
+  "tags": ["jev", "octoloom-example"],
+  "metadata": {
+    "variables": {
+      "jevWrapper": { "url": { "description": "Jev OpenAI wrapper base URL (ends with /v1)", "default": "https://<your-cloudhub-wrapper-deployment-url>/v1", "secret": false } },
+      "jev": { "apiKey": { "description": "Key of the Jev OpenAI wrapper (its wrapper.apiKey; secret, injected at deploy time)", "default": "", "secret": true } },
+      "tablesMcp": { "url": { "description": "Restaurant Tables MCP (A2D mock) base URL", "default": "https://www.a2d-ai.com/api/platform/8552e021-0a18-4ca8-979d-729ef0e71273/", "secret": false } },
+      "menuAgent": { "url": { "description": "Menu Allergy Agent (A2D mock, A2A 1.0) URL", "default": "https://www.a2d-ai.com/api/platform/dfb5bd9b-cf76-4847-99bf-00273c063af7/a2a", "secret": false } },
+      "loyaltyAgent": { "url": { "description": "Restaurant Loyalty Agent (A2D mock, A2A 1.0) URL", "default": "https://www.a2d-ai.com/api/platform/2597660f-31fc-4ef7-b08c-91c7c372d2a4/a2a", "secret": false } }
+    }
+  },
+  "dependencies": [],
+  "groupId": "<enter-your-org-id>",
+  "assetId": "jev-restaurant-booking-v2",
+  "version": "1.0.0"
+}

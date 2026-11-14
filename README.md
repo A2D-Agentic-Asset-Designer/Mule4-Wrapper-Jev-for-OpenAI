@@ -1,6 +1,6 @@
 # Mule 4 Wrapper: Jev for OpenAI
 
-A small Mule 4 application that looks like an **OpenAI Chat Completions** endpoint, so anything that speaks OpenAI can use it. This includes MuleSoft Agent Fabric brokers (v1 LLM brokers and v2 AgentScript brokers).
+A small Mule 4 application that looks like an **OpenAI** endpoint (**Chat Completions** and **Responses** APIs), so anything that speaks OpenAI can use it. This includes MuleSoft Agent Fabric brokers (v1 LLM brokers and v2 AgentScript brokers).
 
 The wrapper sends each request through two steps:
 
@@ -28,6 +28,7 @@ OpenAI-shaped chat.completion (or SSE stream)
 | Method | Path | What it does |
 | --- | --- | --- |
 | POST | `/v1/chat/completions` | OpenAI Chat Completions: messages, tools, tool_choice and stream are supported |
+| POST | `/v1/responses` | OpenAI Responses API (what Agent Fabric brokers call): instructions, input messages, function_call / function_call_output items, function tools, tool_choice, text.format and stream. It is mapped onto the same Jev pipeline |
 | GET | `/v1/models` | Lists the fallback model and `jev` |
 | GET | `/health` | `{"status":"UP"}` |
 | any | anything else | 404 with an OpenAI-style error |
@@ -55,7 +56,7 @@ You need Java 17 and Maven, plus a Mule 4.9 runtime (standalone, or the one bund
 
 ```bash
 mvn -DskipTests package
-cp target/jev-openai-wrapper-1.0.0-mule-application.jar $MULE_HOME/apps/
+cp target/jev-openai-wrapper-1.0.1-mule-application.jar $MULE_HOME/apps/
 $MULE_HOME/bin/mule -M-Dopenrouter.apiKey="$OPENROUTER_API_KEY" -M-Dhttp.port=8091
 ```
 
@@ -77,8 +78,8 @@ Publish to Exchange with your org id as the group id, then deploy with the key a
 ```bash
 mvn -DgroupId=<org-id> -DskipTests deploy          # needs Exchange credentials in ~/.m2/settings.xml (server id anypoint-exchange-v3)
 
-anypoint-cli-v4 runtime-mgr application deploy jev-openai-wrapper cloudhub-us-east-2 4.9.24:10e-java17 jev-openai-wrapper \
-  --groupId <org-id> --assetVersion 1.0.0 --javaVersion 17 \
+anypoint-cli-v4 runtime-mgr application deploy jev-openai-wrapper cloudhub-us-east-2 4.9.24:10-java17 jev-openai-wrapper \
+  --groupId <org-id> --assetVersion 1.0.1 --javaVersion 17 \
   --secureProperty "openrouter.apiKey=$OPENROUTER_API_KEY" \
   --secureProperty "wrapper.apiKey=$WRAPPER_API_KEY"
 ```
@@ -114,11 +115,20 @@ context:
 
 ## Limits
 
-- `stream: true` is supported, but the reply arrives as one chunk after the model has finished (no token streaming).
+- `stream: true` is supported on both APIs, but the reply arrives as one chunk after the model has finished (no token streaming).
 - Jev only picks **one** next action, so each turn has at most one tool call (`parallel_tool_calls: false`).
 - Each call costs one Jev decision (about $0.00002) plus the fallback model's tokens.
-- Only the Chat Completions API is served. `/v1/responses`, embeddings and images are not.
+- The Chat Completions and Responses APIs are served. Embeddings and images are not. On `/v1/responses` only function tools are passed on (no built-in tools such as web search), and `previous_response_id` is not stored: send the whole conversation.
 
 ## Security
 
 Never commit keys. `.gitignore` excludes `*.key`, `.env`, `.envrc` and `local.properties`. Pass keys only as secure properties.
+
+## Example brokers
+
+`examples/` has two Agent Fabric projects that use the wrapper as their OpenAI LLM. Their MCP servers and agents are A2D mocks:
+
+- `v1-library-loans` (v1, A2A 0.3.0): a library broker with a catalog MCP (search_books, place_hold) and two agents (membership, recommendations).
+- `v2-restaurant-booking` (v2, AgentScript, A2A 1.0): a booking broker with a tables MCP (find_table, book_table) and two agents (menu allergies, loyalty).
+
+Deploy one with `anypoint-cli-v4 agent-network project deploy --path examples/<project> -g <gateway> --property jev.apiKey:<wrapper key>`, plus the other variables in its `exchange.json`.

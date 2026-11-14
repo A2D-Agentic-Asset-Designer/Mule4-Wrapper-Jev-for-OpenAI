@@ -42,7 +42,7 @@
       <http:response statusCode="404"/>
     </http:listener>
     <logger level="WARN" message="#['Not handled: ' ++ attributes.method ++ ' ' ++ attributes.requestPath]"/>
-    <set-payload value='#[output application/json --- { error: { message: "Not found: " ++ attributes.method ++ " " ++ attributes.requestPath ++ ". This wrapper serves POST /v1/chat/completions and GET /v1/models.", "type": "invalid_request_error", code: "not_found" } }]'/>
+    <set-payload value='#[output application/json --- { error: { message: "Not found: " ++ attributes.method ++ " " ++ attributes.requestPath ++ ". This wrapper serves POST /v1/chat/completions, POST /v1/responses and GET /v1/models.", "type": "invalid_request_error", code: "not_found" } }]'/>
   </flow>
 
   <!-- POST /v1/chat/completions -->
@@ -55,8 +55,68 @@
         <http:body><![CDATA[#[payload]]]></http:body>
       </http:error-response>
     </http:listener>
+    <flow-ref name="caller-key" doc:name="Caller key"/>
+    <set-variable variableName="req" value="#[payload]" mimeType="application/json" doc:name="OpenAI request"/>
+    <flow-ref name="jev-pipeline" doc:name="Jev + fallback model"/>
+    <choice doc:name="Upstream error?">
+      <when expression="#[attributes.statusCode >= 400]">
+        <flow-ref name="upstream-error"/>
+      </when>
+      <when expression="#[vars.req.stream == true]">
+        <ee:transform doc:name="OpenAI response"><ee:message><ee:set-payload resource="dwl/openai-response.dwl"/></ee:message></ee:transform>
+        <ee:transform doc:name="As SSE chunks"><ee:message><ee:set-payload resource="dwl/openai-stream.dwl"/></ee:message></ee:transform>
+        <set-payload value="#[payload]" mimeType="text/event-stream"/>
+      </when>
+      <otherwise>
+        <ee:transform doc:name="OpenAI response"><ee:message><ee:set-payload resource="dwl/openai-response.dwl"/></ee:message></ee:transform>
+      </otherwise>
+    </choice>
+    <error-handler>
+      <on-error-propagate doc:name="OpenAI-style error">
+        <ee:transform doc:name="Error body"><ee:message><ee:set-payload resource="dwl/error.dwl"/></ee:message></ee:transform>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
 
-    <!-- Caller key (optional): Authorization: Bearer <wrapper.apiKey>. -->
+  <!-- POST /v1/responses: the OpenAI Responses API (used by Agent Fabric brokers), mapped onto the same pipeline. -->
+  <flow name="responses">
+    <http:listener config-ref="api-listener" path="/v1/responses" allowedMethods="POST">
+      <http:response statusCode="#[vars.httpStatus default 200]">
+        <http:headers><![CDATA[#[{ "x-jev-decision": vars.decisionHeader default "none" }]]]></http:headers>
+      </http:response>
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body><![CDATA[#[payload]]]></http:body>
+      </http:error-response>
+    </http:listener>
+    <flow-ref name="caller-key" doc:name="Caller key"/>
+    <set-variable variableName="rreq" value="#[payload]" mimeType="application/json" doc:name="Responses request"/>
+    <ee:transform doc:name="As chat request">
+      <ee:variables><ee:set-variable variableName="req" resource="dwl/responses-to-chat.dwl"/></ee:variables>
+    </ee:transform>
+    <flow-ref name="jev-pipeline" doc:name="Jev + fallback model"/>
+    <choice doc:name="Upstream error?">
+      <when expression="#[attributes.statusCode >= 400]">
+        <flow-ref name="upstream-error"/>
+      </when>
+      <otherwise>
+        <ee:transform doc:name="Responses object"><ee:message><ee:set-payload resource="dwl/chat-to-responses.dwl"/></ee:message></ee:transform>
+        <choice doc:name="Stream?">
+          <when expression="#[vars.rreq.stream == true]">
+            <ee:transform doc:name="As SSE events"><ee:message><ee:set-payload resource="dwl/responses-stream.dwl"/></ee:message></ee:transform>
+            <set-payload value="#[payload]" mimeType="text/event-stream"/>
+          </when>
+        </choice>
+      </otherwise>
+    </choice>
+    <error-handler>
+      <on-error-propagate doc:name="OpenAI-style error">
+        <ee:transform doc:name="Error body"><ee:message><ee:set-payload resource="dwl/error.dwl"/></ee:message></ee:transform>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+
+  <!-- Caller key (optional): Authorization: Bearer <wrapper.apiKey>. -->
+  <sub-flow name="caller-key">
     <choice doc:name="Caller key">
       <when expression="#[!isEmpty(p('wrapper.apiKey')) and ((attributes.headers.authorization default '') != ('Bearer ' ++ p('wrapper.apiKey')))]">
         <set-variable variableName="httpStatus" value="#[401]"/>
@@ -66,13 +126,20 @@
         <raise-error type="APP:UNAUTHORIZED" description="Invalid or missing API key"/>
       </when>
     </choice>
+  </sub-flow>
 
-    <set-variable variableName="req" value="#[payload]" mimeType="application/json" doc:name="OpenAI request"/>
+  <sub-flow name="upstream-error">
+    <set-variable variableName="httpStatus" value="#[attributes.statusCode]"/>
+    <set-payload value="#[output application/json --- { error: { message: (payload.error.message default 'Upstream model error') as String, &quot;type&quot;: 'upstream_error', code: payload.error.code default attributes.statusCode } }]"/>
+  </sub-flow>
+
+  <!-- vars.req (a chat completions request) -> Jev decision -> fallback model. Leaves the raw OpenRouter reply in payload. -->
+  <sub-flow name="jev-pipeline">
     <choice doc:name="Valid request">
       <when expression="#[!(vars.req.messages is Array) or sizeOf(vars.req.messages default []) == 0]">
         <set-variable variableName="httpStatus" value="#[400]"/>
         <set-variable variableName="errType" value="invalid_request_error"/>
-        <set-variable variableName="errMessage" value="messages must be a non-empty array."/>
+        <set-variable variableName="errMessage" value="messages (or input) must be a non-empty array."/>
         <raise-error type="APP:BAD_REQUEST" description="messages missing"/>
       </when>
     </choice>
@@ -116,26 +183,5 @@
         <http:success-status-code-validator values="0..599"/>
       </http:response-validator>
     </http:request>
-
-    <choice doc:name="Upstream error?">
-      <when expression="#[attributes.statusCode >= 400]">
-        <set-variable variableName="httpStatus" value="#[attributes.statusCode]"/>
-        <set-payload value="#[output application/json --- { error: { message: (payload.error.message default 'Upstream model error') as String, &quot;type&quot;: 'upstream_error', code: payload.error.code default attributes.statusCode } }]"/>
-      </when>
-      <when expression="#[vars.req.stream == true]">
-        <ee:transform doc:name="OpenAI response"><ee:message><ee:set-payload resource="dwl/openai-response.dwl"/></ee:message></ee:transform>
-        <ee:transform doc:name="As SSE chunks"><ee:message><ee:set-payload resource="dwl/openai-stream.dwl"/></ee:message></ee:transform>
-        <set-payload value="#[payload]" mimeType="text/event-stream"/>
-      </when>
-      <otherwise>
-        <ee:transform doc:name="OpenAI response"><ee:message><ee:set-payload resource="dwl/openai-response.dwl"/></ee:message></ee:transform>
-      </otherwise>
-    </choice>
-
-    <error-handler>
-      <on-error-propagate doc:name="OpenAI-style error">
-        <ee:transform doc:name="Error body"><ee:message><ee:set-payload resource="dwl/error.dwl"/></ee:message></ee:transform>
-      </on-error-propagate>
-    </error-handler>
-  </flow>
+  </sub-flow>
 </mule>

@@ -1,0 +1,22 @@
+{
+  "main": "agent-network.yaml",
+  "name": "jev-library-loans-v1",
+  "classifier": "agent-network",
+  "descriptorVersion": "1.0.0",
+  "apiVersion": "v1",
+  "tags": ["jev", "octoloom-example"],
+  "metadata": {
+    "variables": {
+      "ingressgw": { "url": { "description": "Ingress gateway base URL (the broker is served under it)", "default": "", "secret": false } },
+      "jevWrapper": { "url": { "description": "Jev OpenAI wrapper base URL (ends with /v1/)", "default": "https://<your-cloudhub-wrapper-deployment-url>/v1/", "secret": false } },
+      "jev": { "apiKey": { "description": "Key of the Jev OpenAI wrapper (its wrapper.apiKey; secret, injected at deploy time)", "default": "", "secret": true } },
+      "catalogMcp": { "url": { "description": "Library Catalog MCP (A2D mock) base URL", "default": "https://www.a2d-ai.com/api/platform/9b2edd04-bf9a-4b09-8b7f-c31d5802585a/", "secret": false } },
+      "membershipAgent": { "url": { "description": "Library Membership Agent (A2D mock, A2A 0.3.0) URL", "default": "https://www.a2d-ai.com/api/platform/9c75f4b5-449f-4fb3-a0e7-d229cb97cd3c/a2a", "secret": false } },
+      "recommendationAgent": { "url": { "description": "Book Recommendation Agent (A2D mock, A2A 0.3.0) URL", "default": "https://www.a2d-ai.com/api/platform/5e0bb263-9aef-4f38-826e-f7072f2a7764/a2a", "secret": false } }
+    }
+  },
+  "dependencies": [],
+  "groupId": "<enter-your-org-id>",
+  "assetId": "jev-library-loans-v1",
+  "version": "1.0.0"
+}

@@ -1,0 +1,64 @@
+# @dialect: AGENTFABRIC=1.0
+# Jev Restaurant Booking: book a table with allergy-safe menu advice and loyalty perks.
+# The LLM is the Jev OpenAI wrapper (Mule 4 app); upstreams are A2D mocks.
+
+system:
+  instructions: "You are the booking assistant of a restaurant. Be short and friendly."
+
+config:
+  agent_name: "booking-broker"
+  default_llm: @llm.default
+
+llm:
+  default:
+    target: "llm://jev_rb2_llm_connection"
+    kind: "OpenAI"
+    model: "openai/gpt-4o-mini"
+
+actions:
+  menu_agent:
+    target: "a2a://jev_rb2_menu_agent_connection"
+    kind: "a2a:send_message"
+  loyalty_agent:
+    target: "a2a://jev_rb2_loyalty_agent_connection"
+    kind: "a2a:send_message"
+  find_table:
+    target: "mcp://jev_rb2_tables_mcp_connection"
+    kind: "mcp:tool"
+    tool_name: "find_table"
+  book_table:
+    target: "mcp://jev_rb2_tables_mcp_connection"
+    kind: "mcp:tool"
+    tool_name: "book_table"
+
+trigger bookingBrokerTrigger:
+  kind: "a2a"
+  target: "brokers://jev_rb2_booking_broker/a2a"
+  on_message: ->
+    transition to @orchestrator.book
+
+orchestrator book:
+  description: "Finds and books a table, checks allergies on the menu and adds loyalty perks."
+  label: "Book Table"
+  system:
+    instructions: |
+      Find a free table with find_table for the party size and time, then book it with book_table using the guest name.
+      When the guest mentions an allergy or diet, ask the menu agent which dishes are safe.
+      Ask the loyalty agent for the guest's perks.
+      Finish with the booking id, the time, safe dishes (if asked) and the perks.
+  reasoning:
+    instructions: ->
+      | {!@request.payload.message.parts[0].text}
+    actions:
+      find: @actions.find_table
+      book: @actions.book_table
+      menu: @actions.menu_agent
+      loyalty: @actions.loyalty_agent
+    max_number_of_loops: 8
+  on_exit: ->
+    transition to @echo.done
+
+echo done:
+  kind: "a2a:status_update_event"
+  state: "TASK_STATE_COMPLETED"
+  message: a2a.message({messageId: uuid(), parts: [a2a.textPart(@orchestrator.book.output)]})

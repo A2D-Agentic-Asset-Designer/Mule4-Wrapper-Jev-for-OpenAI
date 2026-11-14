@@ -1,0 +1,167 @@
+agentNetwork: 2.0.0
+info:
+  label: Jev Restaurant Booking
+  version: v1
+  description: Book a restaurant table with allergy-safe menu advice and loyalty perks. The broker's LLM is the Jev OpenAI wrapper.
+registry:
+  agents:
+    jev_rb2_menu_agent:
+      info:
+        label: Menu Allergy Agent
+        description: Knows the menu and which dishes are safe for an allergy or diet.
+      metadata:
+        platform: MuleSoft
+        interfaces:
+          a2a:
+            card:
+              name: Jev Menu Allergy Agent
+              description: Knows the menu and which dishes are safe for an allergy or diet.
+              version: 1.0.0
+              capabilities:
+                pushNotifications: false
+              defaultInputModes:
+                - text/plain
+              defaultOutputModes:
+                - text/plain
+              skills:
+                - id: menu-allergy
+                  name: Menu and Allergies
+                  description: Say which dishes fit an allergy or diet.
+                  tags:
+                    - restaurant
+                  examples:
+                    - Which dishes are nut-free?
+              supportedInterfaces:
+                - url: https://www.a2d-ai.com/api/platform/dfb5bd9b-cf76-4847-99bf-00273c063af7/a2a
+                  protocolBinding: JSONRPC
+                  protocolVersion: "1.0"
+    jev_rb2_loyalty_agent:
+      info:
+        label: Restaurant Loyalty Agent
+        description: Looks up loyalty points and perks of a guest.
+      metadata:
+        platform: MuleSoft
+        interfaces:
+          a2a:
+            card:
+              name: Jev Restaurant Loyalty Agent
+              description: Looks up loyalty points and perks of a guest.
+              version: 1.0.0
+              capabilities:
+                pushNotifications: false
+              defaultInputModes:
+                - text/plain
+              defaultOutputModes:
+                - text/plain
+              skills:
+                - id: loyalty
+                  name: Loyalty Perks
+                  description: Loyalty status and perks for a guest.
+                  tags:
+                    - restaurant
+                  examples:
+                    - Perks for guest Maria Rossi
+              supportedInterfaces:
+                - url: https://www.a2d-ai.com/api/platform/2597660f-31fc-4ef7-b08c-91c7c372d2a4/a2a
+                  protocolBinding: JSONRPC
+                  protocolVersion: "1.0"
+  mcps:
+    jev_rb2_tables_mcp:
+      info:
+        label: Restaurant Tables MCP
+        description: "Restaurant table booking: find and book tables."
+      metadata:
+        protocolVersion: "2025-06-18"
+        transport:
+          kind: streamableHttp
+          path: /mcp
+        tools:
+          - name: find_table
+            description: Find a free table for a party size and time.
+            inputSchema:
+              type: object
+              properties:
+                party_size:
+                  type: number
+                  description: Number of guests
+                time:
+                  type: string
+                  description: Requested time, e.g. 2026-11-20 19:30
+              required:
+                - party_size
+                - time
+          - name: book_table
+            description: Book a table that find_table returned.
+            inputSchema:
+              type: object
+              properties:
+                table_id:
+                  type: string
+                  description: Table id, e.g. T-12
+                name:
+                  type: string
+                  description: Guest name
+                time:
+                  type: string
+                  description: Booking time
+              required:
+                - table_id
+                - name
+  llms:
+    jev_rb2_jev:
+      info:
+        label: Jev OpenAI Wrapper
+      metadata:
+        platform: OpenAI
+        models:
+          - openai/gpt-4o-mini
+context:
+  connections:
+    jev_rb2_menu_agent_connection:
+      kind: a2a
+      ref:
+        name: jev_rb2_menu_agent
+      url: ${menuAgent.url}
+    jev_rb2_loyalty_agent_connection:
+      kind: a2a
+      ref:
+        name: jev_rb2_loyalty_agent
+      url: ${loyaltyAgent.url}
+    jev_rb2_tables_mcp_connection:
+      kind: mcp
+      ref:
+        name: jev_rb2_tables_mcp
+      url: ${tablesMcp.url}
+    jev_rb2_llm_connection:
+      kind: llm
+      ref:
+        name: jev_rb2_jev
+      url: ${jevWrapper.url}
+      authentication:
+        kind: apiKey
+        apiKey: ${jev.apiKey}
+brokers:
+  jev_rb2_booking_broker:
+    kind: AgentScript
+    implementation: ./brokers/booking-broker.agent
+    interfaces:
+      a2a:
+        card:
+          name: Jev Restaurant Booking Broker
+          description: Book a restaurant table with allergy-safe menu advice and loyalty perks.
+          version: 1.0.0
+          capabilities:
+            streaming: true
+            pushNotifications: false
+          defaultInputModes:
+            - text/plain
+          defaultOutputModes:
+            - text/plain
+          skills:
+            - id: book-table
+              name: Book a Table
+              description: Book a table and answer menu and allergy questions.
+              tags:
+                - restaurant
+              examples:
+                - Table for 4 tomorrow at 19:30 for Maria Rossi, one guest has a nut allergy
