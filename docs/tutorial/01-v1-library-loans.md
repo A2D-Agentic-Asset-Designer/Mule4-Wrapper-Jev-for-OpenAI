@@ -2,19 +2,50 @@
 
 [← Tutorial index](README.md) · [Chapter 2 →](02-v2-restaurant-booking.md)
 
-You build `jev_lib1_library-broker`, an **LLM broker**. A library member asks for a book. The broker searches the catalog, asks the membership agent whether the member may borrow, and places a hold when the book is out. When the member wants ideas, the broker asks the recommendation agent. The broker reads its instructions and lets the LLM pick the next step. Here the LLM is the Jev wrapper, so **Jev** picks it.
+You build `jev_lib1_library-broker`, an **LLM broker**. A library member asks for a book. The broker searches the catalog, asks the membership agent whether the member may borrow, and places a hold when the book is out. When the member wants ideas, the broker asks the recommendation agent. The broker reads its instructions and lets the LLM pick the next step. Here the LLM is the Jev wrapper: **Jev** picks the step, and `openai/gpt-4o-mini` writes the text and the tool arguments ([why two models](README.md#jev-decides-gpt-4o-mini-writes)).
 
 What you will add:
 
 | Element | Key | Type | Upstream |
 | --- | --- | --- | --- |
 | LLM provider | `jev_lib1_jev` | OpenAI | Jev wrapper (`${jevWrapper.url}`) |
-| MCP server | `jev_lib1_catalog-mcp` | streamable HTTP, tools `search_books`, `place_hold` | A2D mock |
-| A2A agent | `jev_lib1_membership-agent` | A2A 0.3.0 | A2D mock |
-| A2A agent | `jev_lib1_recommendation-agent` | A2A 0.3.0 | A2D mock |
+| MCP server | `jev_lib1_catalog-mcp` | streamable HTTP, tools `search_books`, `place_hold` | [A2D mock](#the-a2d-endpoints) |
+| A2A agent | `jev_lib1_membership-agent` | A2A 0.3.0 | [A2D mock](#the-a2d-endpoints) |
+| A2A agent | `jev_lib1_recommendation-agent` | A2A 0.3.0 | [A2D mock](#the-a2d-endpoints) |
 | Broker | `jev_lib1_library-broker` | LLM broker, A2A 0.3.0 | (served by your gateway) |
 
 The finished project is [`examples/v1-library-loans`](../../examples/v1-library-loans).
+
+## The A2D endpoints
+
+The upstreams are public A2D mocks. They need no key and always return the same test data. You enter them as the defaults of the `exchange.json` variables (Step 1), and the connections point to the variables.
+
+| Variable | Used by | Endpoint |
+| --- | --- | --- |
+| `catalogMcp.url` | Library Catalog MCP (`search_books`, `place_hold`) | `https://www.a2d-ai.com/api/platform/9b2edd04-bf9a-4b09-8b7f-c31d5802585a/` |
+| `membershipAgent.url` | Library Membership Agent (A2A 0.3.0) | `https://www.a2d-ai.com/api/platform/9c75f4b5-449f-4fb3-a0e7-d229cb97cd3c/a2a` |
+| `recommendationAgent.url` | Book Recommendation Agent (A2A 0.3.0) | `https://www.a2d-ai.com/api/platform/5e0bb263-9aef-4f38-826e-f7072f2a7764/a2a` |
+
+Keep the trailing `/` on the MCP URL. The broker adds the transport path `/mcp` to it. Each agent's card is at `<agent url>/.well-known/agent-card.json`.
+
+Check them before you build:
+
+```bash
+# MCP: list the tools (expect search_books and place_hold)
+curl -s https://www.a2d-ai.com/api/platform/9b2edd04-bf9a-4b09-8b7f-c31d5802585a/mcp \
+  -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"1","method":"tools/list"}'
+
+# Agent card of the membership agent
+curl -s https://www.a2d-ai.com/api/platform/9c75f4b5-449f-4fb3-a0e7-d229cb97cd3c/a2a/.well-known/agent-card.json
+
+# Ask the membership agent directly (A2A 0.3.0); expect "M-666 is BLOCKED: unpaid fines of 18.50 EUR"
+curl -s https://www.a2d-ai.com/api/platform/9c75f4b5-449f-4fb3-a0e7-d229cb97cd3c/a2a -H 'content-type: application/json' -d '{
+  "jsonrpc":"2.0","id":"1","method":"message/send",
+  "params":{"message":{"role":"user","messageId":"m1","kind":"message","parts":[{"kind":"text","text":"Check member M-666"}]}}}'
+```
+
+Test data in the mocks: book Dune (BK-1001, out), The Hobbit (BK-2002, available), Hyperion (BK-4004) and Foundation (BK-4005). Member M-501 is in good standing. Member M-666 is blocked.
 
 ## Step 1: create the project
 
@@ -35,7 +66,16 @@ The broker shows a red mark and **No model**, and the Problems bar counts 3 erro
 Now open `exchange.json` (the **exchange.json** button in the top bar) and do two things:
 
 - Set `groupId` to **your organization id**.
-- Add the variables the network uses. Copy them from [`examples/v1-library-loans/exchange.json`](../../examples/v1-library-loans/exchange.json): `ingressgw.url`, `jevWrapper.url`, `jev.apiKey` (with `"secret": true` and an empty default), `catalogMcp.url`, `membershipAgent.url` and `recommendationAgent.url`.
+- Add the variables the network uses, under `metadata.variables` (or copy them from [`examples/v1-library-loans/exchange.json`](../../examples/v1-library-loans/exchange.json)):
+
+| Variable | Secret | Default |
+| --- | --- | --- |
+| `ingressgw.url` | no | empty (you give your gateway URL at deploy time) |
+| `jevWrapper.url` | no | your wrapper URL ending in `/v1/` |
+| `jev.apiKey` | **yes** | empty (you give the key at deploy time) |
+| `catalogMcp.url` | no | `https://www.a2d-ai.com/api/platform/9b2edd04-bf9a-4b09-8b7f-c31d5802585a/` |
+| `membershipAgent.url` | no | `https://www.a2d-ai.com/api/platform/9c75f4b5-449f-4fb3-a0e7-d229cb97cd3c/a2a` |
+| `recommendationAgent.url` | no | `https://www.a2d-ai.com/api/platform/5e0bb263-9aef-4f38-826e-f7072f2a7764/a2a` |
 
 ## Step 2: add the Jev wrapper as the LLM provider
 
@@ -49,6 +89,9 @@ Click the blue **+** (**Add to the network**) at the top left of the canvas. The
    - **Label**: `Jev OpenAI Wrapper`
    - **Platform**: `OpenAI` (the wrapper speaks the OpenAI API)
    - **Models**: `openai/gpt-4o-mini`
+
+   > **Why `openai/gpt-4o-mini` and not `~typesafe/jev-latest`?** The model field picks the model that *writes* the text and the tool arguments. Jev (`~typesafe/jev-latest`) *decides* which tool or agent comes next. The wrapper always runs it first, so you never enter it here, and it can't write text. See [Jev decides, gpt-4o-mini writes](README.md#jev-decides-gpt-4o-mini-writes).
+
 3. Add a **connection** for it, `jev-lib1-llm-connection`, with:
    - **URL**: `${jevWrapper.url}` (the wrapper base URL, ending in `/v1/`)
    - **API key**: `${jev.apiKey}` (a variable, so the key is passed only at deploy time)
@@ -72,7 +115,7 @@ The broker's LLM row now shows **Jev OpenAI Wrapper**. In the broker inspector, 
 3. Under **Tools**, add the two tools with their input schemas:
    - `search_books`: search the catalog by title or author. Input `query` (string, required).
    - `place_hold`: place a hold for a member when the book is out. Inputs `book_id` and `member_id` (strings, required).
-4. Add its connection `jev-lib1-catalog-mcp-connection` with URL `${catalogMcp.url}`.
+4. Add its connection `jev-lib1-catalog-mcp-connection` with URL `${catalogMcp.url}`. It resolves to the A2D mock `https://www.a2d-ai.com/api/platform/9b2edd04-bf9a-4b09-8b7f-c31d5802585a/`.
 5. Link it to the broker: drag from the broker's pink **MCP servers** port to the MCP card. In the broker, the allowed tools are `search_books` and `place_hold`.
 
 ![MCP server inspector for the Library Catalog MCP, linked to the broker](images/v1-03-mcp.png)
@@ -92,6 +135,7 @@ Add each agent with **+ → Agent**:
 | Card URL | `${membershipAgent.url}` | `${recommendationAgent.url}` |
 | Card protocol version | `0.3.0` | `0.3.0` |
 | Connection | `jev-lib1-membership-agent-connection` | `jev-lib1-recommendation-agent-connection` |
+| A2D endpoint (variable default) | `https://www.a2d-ai.com/api/platform/9c75f4b5-449f-4fb3-a0e7-d229cb97cd3c/a2a` | `https://www.a2d-ai.com/api/platform/5e0bb263-9aef-4f38-826e-f7072f2a7764/a2a` |
 
 Copy the card's skills from the example if you want the same details. Then drag from the broker's blue **Agents** port to each agent card.
 
@@ -133,7 +177,7 @@ Compare it with [`examples/v1-library-loans/agent-network.yaml`](../../examples/
 1. In the **Projects & Deploy** view, click the rocket (**Deploy**) on `jev-library-loans-v1`.
 2. Pick **Single gateway** and enter your gateway name. The chip below it shows its state and region.
 3. Under **Secrets**, type the wrapper key for `jev.apiKey`. Octoloom passes it with `--property` and does not store it.
-4. Under **Deployment properties**, add the values that have no default:
+4. Under **Deployment properties**, add the values that have no default. The A2D URLs already have their defaults, so you don't need to pass them here:
    - `ingressgw.url:https://<gateway-public-url>`
    - `jevWrapper.url:https://<wrapper-public-url>/v1/` (when you don't use the demo wrapper)
 5. Keep **Tracing**, **Wait until the network is ready** and **Publish before deploy** on. Click **Deploy**.

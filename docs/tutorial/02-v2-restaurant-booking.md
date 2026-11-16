@@ -2,19 +2,50 @@
 
 [← Chapter 1](01-v1-library-loans.md) · [Tutorial index](README.md)
 
-You build `jev_rb2_booking_broker`, an **AgentScript broker**. A guest asks for a table. The broker finds and books one, asks the menu agent about allergies or diets, and adds the guest's loyalty perks. The network file (`agent-network.yaml`) lists the registry, the connections and the broker. The broker's steps live in an AgentScript flow (`brokers/booking-broker.agent`). One orchestrator step lets the LLM (Jev, through the wrapper) pick among four actions.
+You build `jev_rb2_booking_broker`, an **AgentScript broker**. A guest asks for a table. The broker finds and books one, asks the menu agent about allergies or diets, and adds the guest's loyalty perks. The network file (`agent-network.yaml`) lists the registry, the connections and the broker. The broker's steps live in an AgentScript flow (`brokers/booking-broker.agent`). One orchestrator step lets the LLM pick among four actions. Through the wrapper, **Jev** picks the action and `openai/gpt-4o-mini` writes the arguments and the reply ([why two models](README.md#jev-decides-gpt-4o-mini-writes)).
 
 What you will add:
 
 | Element | Key | Type | Upstream |
 | --- | --- | --- | --- |
 | LLM | `jev_rb2_jev` + connection `jev_rb2_llm_connection` | OpenAI | Jev wrapper (`${jevWrapper.url}`), uses `/v1/responses` |
-| MCP server | `jev_rb2_tables_mcp` + `jev_rb2_tables_mcp_connection` | streamable HTTP, tools `find_table`, `book_table` | A2D mock |
-| A2A agent | `jev_rb2_menu_agent` + `jev_rb2_menu_agent_connection` | A2A 1.0 | A2D mock |
-| A2A agent | `jev_rb2_loyalty_agent` + `jev_rb2_loyalty_agent_connection` | A2A 1.0 | A2D mock |
+| MCP server | `jev_rb2_tables_mcp` + `jev_rb2_tables_mcp_connection` | streamable HTTP, tools `find_table`, `book_table` | [A2D mock](#the-a2d-endpoints) |
+| A2A agent | `jev_rb2_menu_agent` + `jev_rb2_menu_agent_connection` | A2A 1.0 | [A2D mock](#the-a2d-endpoints) |
+| A2A agent | `jev_rb2_loyalty_agent` + `jev_rb2_loyalty_agent_connection` | A2A 1.0 | [A2D mock](#the-a2d-endpoints) |
 | Broker | `jev_rb2_booking_broker` | AgentScript, A2A 1.0 | (served by your gateway) |
 
 The finished project is [`examples/v2-restaurant-booking`](../../examples/v2-restaurant-booking). The wrapper must be **1.0.1 or later**: v2 brokers call `POST /v1/responses` and check it when they start.
+
+## The A2D endpoints
+
+The upstreams are public A2D mocks. They need no key and always return the same test data.
+
+| Variable | Used by | Endpoint |
+| --- | --- | --- |
+| `tablesMcp.url` | Restaurant Tables MCP (`find_table`, `book_table`) | `https://www.a2d-ai.com/api/platform/8552e021-0a18-4ca8-979d-729ef0e71273/` |
+| `menuAgent.url` | Menu Allergy Agent (A2A 1.0) | `https://www.a2d-ai.com/api/platform/dfb5bd9b-cf76-4847-99bf-00273c063af7/a2a` |
+| `loyaltyAgent.url` | Restaurant Loyalty Agent (A2A 1.0) | `https://www.a2d-ai.com/api/platform/2597660f-31fc-4ef7-b08c-91c7c372d2a4/a2a` |
+
+Keep the trailing `/` on the MCP URL. The broker adds the transport path `/mcp` to it. Each agent's card is at `<agent url>/.well-known/agent-card.json`. In `agent-network.yaml`, the agent cards also list the same URL under `supportedInterfaces` (binding `JSONRPC`, protocol version `1.0`).
+
+Check them before you build:
+
+```bash
+# MCP: list the tools (expect find_table and book_table)
+curl -s https://www.a2d-ai.com/api/platform/8552e021-0a18-4ca8-979d-729ef0e71273/mcp \
+  -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"1","method":"tools/list"}'
+
+# Agent card of the menu agent
+curl -s https://www.a2d-ai.com/api/platform/dfb5bd9b-cf76-4847-99bf-00273c063af7/a2a/.well-known/agent-card.json
+
+# Ask the menu agent directly (A2A 1.0); expect "Nut-free dishes: grilled salmon, risotto ai funghi, lemon sorbet ..."
+curl -s https://www.a2d-ai.com/api/platform/dfb5bd9b-cf76-4847-99bf-00273c063af7/a2a -H 'content-type: application/json' -H 'A2A-Version: 1.0' -d '{
+  "jsonrpc":"2.0","id":"1","method":"SendMessage",
+  "params":{"message":{"role":"ROLE_USER","messageId":"m1","parts":[{"text":"Which dishes are nut-free?"}]}}}'
+```
+
+Test data in the mocks: `find_table` returns table T-12 by the window for up to 8 guests, `book_table` returns RSV-5521, and every guest is a Gold loyalty member with 1,240 points.
 
 ## Step 1: create the project
 
@@ -34,7 +65,15 @@ In the broker inspector, set the key to `jev_rb2_booking_broker`, the card name 
 In `exchange.json`:
 
 - Set `groupId` to **your organization id**.
-- Copy the variables from [`examples/v2-restaurant-booking/exchange.json`](../../examples/v2-restaurant-booking/exchange.json): `jevWrapper.url` (ending in `/v1`), `jev.apiKey` (`"secret": true`, empty default), `tablesMcp.url`, `menuAgent.url` and `loyaltyAgent.url`.
+- Add the variables under `metadata.variables` (or copy them from [`examples/v2-restaurant-booking/exchange.json`](../../examples/v2-restaurant-booking/exchange.json)):
+
+| Variable | Secret | Default |
+| --- | --- | --- |
+| `jevWrapper.url` | no | your wrapper URL ending in `/v1` |
+| `jev.apiKey` | **yes** | empty (you give the key at deploy time) |
+| `tablesMcp.url` | no | `https://www.a2d-ai.com/api/platform/8552e021-0a18-4ca8-979d-729ef0e71273/` |
+| `menuAgent.url` | no | `https://www.a2d-ai.com/api/platform/dfb5bd9b-cf76-4847-99bf-00273c063af7/a2a` |
+| `loyaltyAgent.url` | no | `https://www.a2d-ai.com/api/platform/2597660f-31fc-4ef7-b08c-91c7c372d2a4/a2a` |
 
 ## Step 2: add the Jev wrapper as the LLM
 
@@ -45,6 +84,8 @@ In `exchange.json`:
    - **Platform**: `OpenAI`
    - **Models**: `openai/gpt-4o-mini`
    - **Input format**: leave it empty
+
+   > **Why `openai/gpt-4o-mini` and not `~typesafe/jev-latest`?** The model field picks the model that *writes* the text and the tool arguments. Jev (`~typesafe/jev-latest`) *decides* which tool or agent comes next. The wrapper always runs it first, so you never enter it here, and it can't write text. See [Jev decides, gpt-4o-mini writes](README.md#jev-decides-gpt-4o-mini-writes).
 3. Add the connection `jev_rb2_llm_connection` with:
    - **URL**: `${jevWrapper.url}`
    - **Authentication**: `apiKey`, value `${jev.apiKey}`
@@ -63,7 +104,7 @@ The broker footer still says **No model**. In a v2 network, the flow chooses the
 - **Tools**:
   - `find_table`: find a free table for a party size and time. Inputs `party_size` (number) and `time` (string), both required.
   - `book_table`: book a table that `find_table` returned. Inputs `table_id` and `name` (required) and `time`.
-- **Connection** `jev_rb2_tables_mcp_connection`, URL `${tablesMcp.url}`
+- **Connection** `jev_rb2_tables_mcp_connection`, URL `${tablesMcp.url}` (the A2D mock `https://www.a2d-ai.com/api/platform/8552e021-0a18-4ca8-979d-729ef0e71273/`)
 
 **+ → Agent**, twice:
 
@@ -74,6 +115,8 @@ The broker footer still says **No model**. In a v2 network, the flow chooses the
 | Description | `Knows the menu and which dishes are safe for an allergy or diet.` | `Looks up loyalty points and perks of a guest.` |
 | Platform | MuleSoft, A2A 1.0 (JSONRPC binding) | MuleSoft, A2A 1.0 (JSONRPC binding) |
 | Connection | `jev_rb2_menu_agent_connection`, URL `${menuAgent.url}` | `jev_rb2_loyalty_agent_connection`, URL `${loyaltyAgent.url}` |
+| A2D endpoint (variable default) | `https://www.a2d-ai.com/api/platform/dfb5bd9b-cf76-4847-99bf-00273c063af7/a2a` | `https://www.a2d-ai.com/api/platform/2597660f-31fc-4ef7-b08c-91c7c372d2a4/a2a` |
+| Card `supportedInterfaces` | same URL, `JSONRPC`, `"1.0"` | same URL, `JSONRPC`, `"1.0"` |
 
 ![Network with the LLM, the broker, two agents and the MCP server, not yet linked](images/v2-03-upstreams.png)
 
@@ -110,7 +153,7 @@ llm:
   default:
     target: "llm://jev_rb2_llm_connection"
     kind: "OpenAI"
-    model: "openai/gpt-4o-mini"
+    model: "openai/gpt-4o-mini"   # writes the text; Jev decides inside the wrapper
 
 actions:
   menu_agent:
@@ -161,7 +204,7 @@ echo done:
   message: a2a.message({messageId: uuid(), parts: [a2a.textPart(@orchestrator.book.output)]})
 ```
 
-On each loop of the orchestrator, the broker asks the wrapper (`/v1/responses`) for the next step. Jev picks one of the four actions or the final answer, and `gpt-4o-mini` writes the arguments or the text.
+On each loop of the orchestrator, the broker asks the wrapper (`/v1/responses`) for the next step. Jev picks one of the four actions or the final answer, and `gpt-4o-mini` writes the arguments or the text. Keep `model` a chat model: `~typesafe/jev-latest` would fail here, because Jev can only decide ([why](README.md#jev-decides-gpt-4o-mini-writes)).
 
 The Problems bar says **No problems**. Click **Save**.
 

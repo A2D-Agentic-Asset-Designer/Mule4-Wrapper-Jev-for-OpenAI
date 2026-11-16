@@ -21,7 +21,7 @@ You need:
 4. **An Agent Fabric gateway** in your environment. You need its name and its public URL.
 5. **Your organization id.** Each project's `exchange.json` uses it as `groupId`. The examples have the placeholder `<enter-your-org-id>`, and the build fails until you replace it.
 
-The MCP servers and the agents in both networks are public **A2D mocks**. They need no account and return fixed test data, so the results in this tutorial are the same for you.
+The MCP servers and the agents in both networks are public **A2D mocks**. They need no account and return fixed test data, so the results in this tutorial are the same for you. Each chapter lists its A2D endpoints with a command to check them (chapter 1: [A2D endpoints](01-v1-library-loans.md#the-a2d-endpoints), chapter 2: [A2D endpoints](02-v2-restaurant-booking.md#the-a2d-endpoints)).
 
 ## How the pieces fit
 
@@ -35,6 +35,27 @@ Agent Fabric gateway ──► broker (v1 LLM broker or v2 AgentScript broker)
                             ├──► MCP server (A2D mock)
                             └──► A2A agents (A2D mocks)
 ```
+
+## Jev decides, `gpt-4o-mini` writes
+
+Both chapters set the LLM model to `openai/gpt-4o-mini`, and you may wonder why it isn't `~typesafe/jev-latest`. It is not a mistake, and Jev is still in charge.
+
+**Jev only decides.** `~typesafe/jev-latest` is a *decisions* model. It answers one question, "which tool, which agent, or answer the user now?", with a choice and a confidence score. It cannot write a reply or the tool arguments (for example `query: "Dune"`). OpenRouter refuses it as a chat model:
+
+```
+~typesafe/jev-latest is a decisions model and cannot be used with the chat/completions endpoint. (HTTP 400)
+```
+
+So the wrapper handles each call from the broker in two steps:
+
+| Step | Model | Set where | What it does |
+| --- | --- | --- | --- |
+| 1. Decide | `~typesafe/jev-latest` | the wrapper's `jev.model` (fixed, not in the network) | Picks the next tool or agent, or `respond_to_user` |
+| 2. Write | `openai/gpt-4o-mini` | the **model** field of the LLM in the network (or the wrapper's `fallback.model`) | Writes the text or the arguments of the tool Jev picked, and must follow Jev's pick |
+
+The **model** field in Octoloom therefore picks only the model that writes. Any OpenRouter chat model id with a `/` works there, such as `openai/gpt-4o` or `anthropic/claude-sonnet-4`. Don't enter `~typesafe/jev-latest` there: the wrapper would pass it on as the writing model and every reply would fail with the 400 above. When Jev's confidence is below 0.5, or Jev fails, the writing model decides alone.
+
+To see that Jev decided, look at the `x-jev-decision` response header (for example `tool:search_books;confidence=1`) or the wrapper logs.
 
 The broker sees the wrapper as an ordinary **OpenAI** LLM provider. Jev decides which tool or agent comes next, so every wrapper response has an `x-jev-decision` header and the wrapper logs list each decision.
 
