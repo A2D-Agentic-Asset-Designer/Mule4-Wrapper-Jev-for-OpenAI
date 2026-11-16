@@ -135,4 +135,6 @@ Never commit keys. `.gitignore` excludes `*.key`, `.env`, `.envrc` and `local.pr
 
 Each project has a README with deploy steps and tested example prompts: [v1-library-loans](examples/v1-library-loans/README.md), [v2-restaurant-booking](examples/v2-restaurant-booking/README.md).
 
+**Tutorial:** [build both networks step by step in Octoloom](docs/tutorial/README.md), with screenshots of every step, the deploy and the chat.
+
 Deploy one with `anypoint-cli-v4 agent-network project deploy --path examples/<project> -g <gateway> --property jev.apiKey:<wrapper key>`, plus the other variables in its `exchange.json`.

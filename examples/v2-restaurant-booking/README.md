@@ -14,7 +14,7 @@ The MCP server and the agents are public A2D mocks, so the network needs no othe
 
 1. The Jev wrapper must be running, at version **1.0.1 or later** (see the [main README](../../README.md)). v2 brokers call `POST /v1/responses` and check it at startup. On an older wrapper the broker keeps restarting. Note the wrapper's public URL and its caller key (`wrapper.apiKey`).
 2. You need an Agent Fabric gateway in your environment, plus `anypoint-cli-v4` with the `agent-network` plugin, logged in to your org.
-3. In `exchange.json`, set `groupId` to **your organization id**. The CLI does not fill in a placeholder.
+3. In `exchange.json`, replace `<enter-your-org-id>` in `groupId` with **your organization id**. The CLI does not fill in a placeholder.
 4. Connection keys must be unique in an environment. When you deploy a second copy, rename the `jev_rb2_` prefix, or the deploy fails with a 409.
 
 ## Variables (`exchange.json`)

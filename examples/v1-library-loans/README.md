@@ -14,7 +14,7 @@ The MCP server and the agents are public A2D mocks, so the network needs no othe
 
 1. The Jev wrapper must be running (see the [main README](../../README.md)). Note its public URL and its caller key (`wrapper.apiKey`).
 2. You need an Agent Fabric gateway in your environment, plus `anypoint-cli-v4` with the `agent-network` plugin, logged in to your org.
-3. In `exchange.json`, set `groupId` to **your organization id**. The CLI does not fill in a placeholder, and the build fails on one.
+3. In `exchange.json`, replace `<enter-your-org-id>` in `groupId` with **your organization id**. The CLI does not fill in a placeholder, and the build fails on one.
 
 ## Variables (`exchange.json`)
 

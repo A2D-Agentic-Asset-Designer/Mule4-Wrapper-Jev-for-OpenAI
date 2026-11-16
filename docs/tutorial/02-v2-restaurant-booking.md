@@ -1,0 +1,222 @@
+# Chapter 2: Restaurant Booking (Deterministic Network, v2)
+
+[← Chapter 1](01-v1-library-loans.md) · [Tutorial index](README.md)
+
+You build `jev_rb2_booking_broker`, an **AgentScript broker**. A guest asks for a table. The broker finds and books one, asks the menu agent about allergies or diets, and adds the guest's loyalty perks. The network file (`agent-network.yaml`) lists the registry, the connections and the broker. The broker's steps live in an AgentScript flow (`brokers/booking-broker.agent`). One orchestrator step lets the LLM (Jev, through the wrapper) pick among four actions.
+
+What you will add:
+
+| Element | Key | Type | Upstream |
+| --- | --- | --- | --- |
+| LLM | `jev_rb2_jev` + connection `jev_rb2_llm_connection` | OpenAI | Jev wrapper (`${jevWrapper.url}`), uses `/v1/responses` |
+| MCP server | `jev_rb2_tables_mcp` + `jev_rb2_tables_mcp_connection` | streamable HTTP, tools `find_table`, `book_table` | A2D mock |
+| A2A agent | `jev_rb2_menu_agent` + `jev_rb2_menu_agent_connection` | A2A 1.0 | A2D mock |
+| A2A agent | `jev_rb2_loyalty_agent` + `jev_rb2_loyalty_agent_connection` | A2A 1.0 | A2D mock |
+| Broker | `jev_rb2_booking_broker` | AgentScript, A2A 1.0 | (served by your gateway) |
+
+The finished project is [`examples/v2-restaurant-booking`](../../examples/v2-restaurant-booking). The wrapper must be **1.0.1 or later**: v2 brokers call `POST /v1/responses` and check it when they start.
+
+## Step 1: create the project
+
+1. Run **Octoloom: New agent network**.
+2. Under **1 Network style**, pick **Deterministic Network** (Agent Network 2.0, AgentScript flows).
+3. Under **2 Start from**, pick **Blank**. Enter the broker name `booking broker`.
+4. Name the project `jev-restaurant-booking-v2` and click **Create blank project**.
+
+![New agent network dialog with Deterministic Network and Blank selected](images/v2-00-new-project.png)
+
+You get `agent-network.yaml`, `exchange.json` and `brokers/booking-broker.agent`, a flow with a trigger and an echo reply.
+
+![Blank v2 canvas with one AgentScript broker](images/v2-01-blank.png)
+
+In the broker inspector, set the key to `jev_rb2_booking_broker`, the card name to `Jev Restaurant Booking Broker` and the description to `Book a restaurant table with allergy-safe menu advice and loyalty perks.`
+
+In `exchange.json`:
+
+- Set `groupId` to **your organization id**.
+- Copy the variables from [`examples/v2-restaurant-booking/exchange.json`](../../examples/v2-restaurant-booking/exchange.json): `jevWrapper.url` (ending in `/v1`), `jev.apiKey` (`"secret": true`, empty default), `tablesMcp.url`, `menuAgent.url` and `loyaltyAgent.url`.
+
+## Step 2: add the Jev wrapper as the LLM
+
+1. Click **+** (**Add to the network**) and pick **LLM provider**.
+2. Set:
+   - **Key**: `jev_rb2_jev`
+   - **Label**: `Jev OpenAI Wrapper`
+   - **Platform**: `OpenAI`
+   - **Models**: `openai/gpt-4o-mini`
+   - **Input format**: leave it empty
+3. Add the connection `jev_rb2_llm_connection` with:
+   - **URL**: `${jevWrapper.url}`
+   - **Authentication**: `apiKey`, value `${jev.apiKey}`
+4. Link the LLM to the broker.
+
+![LLM provider inspector for the Jev OpenAI Wrapper in the v2 network](images/v2-02-llm.png)
+
+The broker footer still says **No model**. In a v2 network, the flow chooses the model, and you set it in Step 4.
+
+## Step 3: add the MCP server and the agents
+
+**+ → MCP server**:
+
+- **Key** `jev_rb2_tables_mcp`, **label** `Restaurant Tables MCP`, **description** `Restaurant table booking: find and book tables.`
+- **Transport**: `streamableHttp`, path `/mcp`, protocol version `2025-06-18`
+- **Tools**:
+  - `find_table`: find a free table for a party size and time. Inputs `party_size` (number) and `time` (string), both required.
+  - `book_table`: book a table that `find_table` returned. Inputs `table_id` and `name` (required) and `time`.
+- **Connection** `jev_rb2_tables_mcp_connection`, URL `${tablesMcp.url}`
+
+**+ → Agent**, twice:
+
+| Field | Menu agent | Loyalty agent |
+| --- | --- | --- |
+| Key | `jev_rb2_menu_agent` | `jev_rb2_loyalty_agent` |
+| Label | `Menu Allergy Agent` | `Restaurant Loyalty Agent` |
+| Description | `Knows the menu and which dishes are safe for an allergy or diet.` | `Looks up loyalty points and perks of a guest.` |
+| Platform | MuleSoft, A2A 1.0 (JSONRPC binding) | MuleSoft, A2A 1.0 (JSONRPC binding) |
+| Connection | `jev_rb2_menu_agent_connection`, URL `${menuAgent.url}` | `jev_rb2_loyalty_agent_connection`, URL `${loyaltyAgent.url}` |
+
+![Network with the LLM, the broker, two agents and the MCP server, not yet linked](images/v2-03-upstreams.png)
+
+The upstream cards show **Link to Jev Restaurant B...**, and the broker says "2 available: click Edit to link". In a v2 network, the links come from the flow. As soon as the flow uses a connection, the card shows it as linked.
+
+## Step 4: write the AgentScript flow
+
+Click **Flow** on the broker card. You can also open `brokers/booking-broker.agent`. The flow canvas opens.
+
+![AgentScript flow: Booking Broker Trigger, Book Table orchestrator with four actions, Done reply](images/v2-04-flow.png)
+
+Build three nodes:
+
+1. **Trigger** `bookingBrokerTrigger` (kind `a2a`, target `brokers://jev_rb2_booking_broker/a2a`). On a message it moves to the orchestrator.
+2. **Orchestrator** `book` (label **Book Table**). Drag **Orchestrator** from *Drag to canvas*, then give it:
+   - the system instructions below
+   - the four actions `find`, `book`, `menu`, `loyalty`
+   - at most 8 loops
+   - on exit, a move to the reply
+3. **Reply** `done`. It sends the orchestrator's output as a completed A2A 1.0 status update.
+
+Under **Settings → Agent Settings** and **Connections**, declare the LLM and the four actions so they point to the connections from Steps 2 and 3. The whole file:
+
+```yaml
+# @dialect: AGENTFABRIC=1.0
+system:
+  instructions: "You are the booking assistant of a restaurant. Be short and friendly."
+
+config:
+  agent_name: "booking-broker"
+  default_llm: @llm.default
+
+llm:
+  default:
+    target: "llm://jev_rb2_llm_connection"
+    kind: "OpenAI"
+    model: "openai/gpt-4o-mini"
+
+actions:
+  menu_agent:
+    target: "a2a://jev_rb2_menu_agent_connection"
+    kind: "a2a:send_message"
+  loyalty_agent:
+    target: "a2a://jev_rb2_loyalty_agent_connection"
+    kind: "a2a:send_message"
+  find_table:
+    target: "mcp://jev_rb2_tables_mcp_connection"
+    kind: "mcp:tool"
+    tool_name: "find_table"
+  book_table:
+    target: "mcp://jev_rb2_tables_mcp_connection"
+    kind: "mcp:tool"
+    tool_name: "book_table"
+
+trigger bookingBrokerTrigger:
+  kind: "a2a"
+  target: "brokers://jev_rb2_booking_broker/a2a"
+  on_message: ->
+    transition to @orchestrator.book
+
+orchestrator book:
+  description: "Finds and books a table, checks allergies on the menu and adds loyalty perks."
+  label: "Book Table"
+  system:
+    instructions: |
+      Find a free table with find_table for the party size and time, then book it with book_table using the guest name.
+      When the guest mentions an allergy or diet, ask the menu agent which dishes are safe.
+      Ask the loyalty agent for the guest's perks.
+      Finish with the booking id, the time, safe dishes (if asked) and the perks.
+  reasoning:
+    instructions: ->
+      | {!@request.payload.message.parts[0].text}
+    actions:
+      find: @actions.find_table
+      book: @actions.book_table
+      menu: @actions.menu_agent
+      loyalty: @actions.loyalty_agent
+    max_number_of_loops: 8
+  on_exit: ->
+    transition to @echo.done
+
+echo done:
+  kind: "a2a:status_update_event"
+  state: "TASK_STATE_COMPLETED"
+  message: a2a.message({messageId: uuid(), parts: [a2a.textPart(@orchestrator.book.output)]})
+```
+
+On each loop of the orchestrator, the broker asks the wrapper (`/v1/responses`) for the next step. Jev picks one of the four actions or the final answer, and `gpt-4o-mini` writes the arguments or the text.
+
+The Problems bar says **No problems**. Click **Save**.
+
+## Step 5: check the network
+
+Go back to the network (**Network** in the top bar). Every upstream is now linked to the broker through the flow.
+
+![Full v2 network: every upstream linked to Jev Restaurant Booking](images/v2-05-network.png)
+
+Compare `agent-network.yaml` with [the example](../../examples/v2-restaurant-booking/agent-network.yaml) in the **Code** view.
+
+## Step 6: deploy
+
+1. In **Projects & Deploy**, click the rocket on `jev-restaurant-booking-v2`.
+2. Enter your gateway name.
+3. Type the wrapper key for `jev.apiKey`.
+4. Add `jevWrapper.url:https://<wrapper-public-url>/v1` under **Deployment properties** when you don't use the demo wrapper.
+5. Click **Deploy**.
+
+![Deploy form for the v2 project](images/v2-06-deploy.png)
+
+The first start of a v2 broker can take several minutes. If you change `exchange.json` after a build, delete `target/` before you deploy again. Connection keys must be unique in an environment: for a second copy, rename the `jev_rb2_` prefix, or the deploy fails with a 409.
+
+## Step 7: chat with the broker
+
+Open the chat on the broker (A2A 1.0).
+
+![Chat with the Jev Restaurant Booking Broker: booking RSV-5521, nut-free dishes, Gold perks](images/v2-07-chat.png)
+
+| Prompt | Expected result |
+| --- | --- |
+| Table for 4 on 2026-11-20 at 19:30 for Maria Rossi. One guest has a nut allergy. | Table T-12, booking RSV-5521. Nut-free: grilled salmon, risotto ai funghi, lemon sorbet (avoid the pesto pasta and the praline cake). Gold, 1,240 points: a free welcome drink and 10% off |
+| Table for 2 on 2026-11-21 at 20:00 for John Smith. We eat gluten-free. | RSV-5521. Gluten-free: grilled salmon, steak frites, panna cotta. Gold perks |
+| Book a table for 10 people on 2026-11-22 at 19:00 for Anna Meier. | `find_table` refuses parties over 8. The broker tries another time, then asks you to change the request (`TASK_STATE_INPUT_REQUIRED`). Nothing is booked |
+
+The wrapper logs show Jev's decision for each loop:
+
+```
+decision {"action":"tool","tool":"find_table-client__find_table","confidence":1}
+decision {"action":"tool","tool":"menu_agent-client","confidence":0.6}
+decision {"action":"tool","tool":"book_table-client__book_table","confidence":0.9}
+decision {"action":"tool","tool":"loyalty_agent-client","confidence":0.99}
+decision {"action":"respond","choice":"respond_to_user","confidence":1}
+```
+
+When Jev's confidence is below `jev.minConfidence` (0.5), the wrapper lets the chat model decide alone (`"action":"auto"`).
+
+## What's different from v1
+
+| | v1 Library Loans | v2 Restaurant Booking |
+| --- | --- | --- |
+| Who decides the steps | The LLM broker, from its instructions | The AgentScript flow. Inside the orchestrator step, the LLM picks the action |
+| Links to upstreams | Set on the broker in `agent-network.yaml` | Come from the targets in the `.agent` file |
+| Wrapper API | `/v1/chat/completions` | `/v1/responses` |
+| A2A | 0.3.0 (`message/send`) | 1.0 (`SendMessage`, header `A2A-Version: 1.0`) |
+| Agents offered to the LLM as | OpenAI custom tools | function tools (`<action>-client`) |
+
+[← Tutorial index](README.md)
