@@ -15,7 +15,12 @@ fun itemEvents(it, i) =
       { "type": "response.content_part.done", item_id: it.id, output_index: i, content_index: 0, part: part },
       { "type": "response.output_item.done", output_index: i, item: it }
     ]
-  } else [
+  } else if (it."type" == "custom_tool_call") [
+    { "type": "response.output_item.added", output_index: i, item: (it -- ["status", "input"]) ++ { status: "in_progress", "input": "" } },
+    { "type": "response.custom_tool_call_input.delta", item_id: it.id, output_index: i, delta: it."input" },
+    { "type": "response.custom_tool_call_input.done", item_id: it.id, output_index: i, "input": it."input" },
+    { "type": "response.output_item.done", output_index: i, item: it }
+  ] else [
     { "type": "response.output_item.added", output_index: i, item: (it -- ["status", "arguments"]) ++ { status: "in_progress", arguments: "" } },
     { "type": "response.function_call_arguments.delta", item_id: it.id, output_index: i, delta: it.arguments },
     { "type": "response.function_call_arguments.done", item_id: it.id, output_index: i, arguments: it.arguments },

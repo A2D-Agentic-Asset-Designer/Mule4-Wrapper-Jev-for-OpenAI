@@ -90,6 +90,7 @@
     </http:listener>
     <flow-ref name="caller-key" doc:name="Caller key"/>
     <set-variable variableName="rreq" value="#[payload]" mimeType="application/json" doc:name="Responses request"/>
+    <logger level="DEBUG" doc:name="Request shape (diagnostics)" message="#[output application/json indent=false --- { shape: { tools: ((payload.tools default []) map { name: $.name, kind: $.&quot;type&quot; }), tool_choice: payload.tool_choice, format: payload.text.format.&quot;type&quot; default null } }]"/>
     <ee:transform doc:name="As chat request">
       <ee:variables><ee:set-variable variableName="req" resource="dwl/responses-to-chat.dwl"/></ee:variables>
     </ee:transform>

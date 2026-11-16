@@ -57,24 +57,30 @@ curl -s https://<gateway-public-url>/jev_lib1_library-broker/ -H 'content-type: 
     "parts": [ { "kind": "text", "text": "I am member M-501. Is Dune available? If not, please place a hold for me." } ] } } }'
 ```
 
-Example prompts (the results come from the mocks, tested on 2026-11-14):
+Example prompts (the results come from the mocks, tested on 2026-11-16 with wrapper 1.1.0):
 
+- **I am member M-666. Please check my membership and place a hold on Dune for me.**
+  - Jev's calls: `search_books`, then the **Library Membership agent**, then answer.
+  - Expected result: M-666 is blocked (unpaid fines of 18.50 EUR), so no hold is placed.
 - **I am member M-501. Is Dune available? If not, please place a hold for me.**
-  - Expected result: `search_books`: Dune (BK-1001) is out. `place_hold` creates HLD-7781, queue position 2, pickup at the Main branch.
+  - Jev's calls: `search_books`, then the Library Membership agent, then `place_hold`.
+  - Expected result: Dune (BK-1001) is out. The hold is HLD-7781, queue position 2, pickup at the Main branch.
+- **I loved Dune. Can you recommend similar books?**
+  - Jev's calls: the **Book Recommendation agent**.
+  - Expected result: Hyperion (BK-4004) and Foundation (BK-4005), both available.
 - **I am member M-501. Is The Hobbit available? Please place a hold if it is not.**
-  - Expected result: `search_books`: The Hobbit (BK-2002) is available, so no hold is placed.
-- **Is Project Hail Mary in the catalog?**
-  - Expected result: `search_books` with any other title returns Project Hail Mary (BK-3003), available.
+  - Jev's calls: `search_books`.
+  - Expected result: The Hobbit (BK-2002) is available, so no hold is placed.
 
 Each reply from the wrapper has a header like `x-jev-decision: tool:<name>;confidence=0.98`, and the wrapper logs list every decision, so you can see that Jev picked the tool.
 
-## Known limit
+## How the v1 broker offers its agents
 
-In every test the v1 broker offered the LLM only the **MCP tools**. Jev never got the two linked agents to choose from. As a result:
+The v1 broker sends each linked A2A agent as an OpenAI **custom tool** (`"type": "custom"`, free-text input, no parameters). Its MCP tools are sent as function tools. Up to wrapper 1.0.1, only function tools were passed on to Jev, so Jev never saw the agents:
 
-- **Member M-666 wants to hold Dune** places the hold, even though the Membership mock says M-666 is blocked (unpaid fines of 18.50 EUR).
-- **Books like Dune?** gets a follow-up question back, not the recommendation agent's answer.
+- M-666 got a hold even though the Membership mock says that member is blocked.
+- "Books like Dune" got a follow-up question instead of the recommendation agent's answer.
 
-Use the v2 example ([v2-restaurant-booking](../v2-restaurant-booking/README.md)) to see agents called through the wrapper. There, both agents are called.
+Since 1.1.0, the wrapper shows Jev a custom tool as a function with one string argument `input`, and returns the call to the broker as a `custom_tool_call`. The broker then sends that text to the agent. No change to the broker, its instructions or the A2D mocks was needed.
 
 The broker is probabilistic, so the wording and the order of calls can change between runs. The ids and numbers come from the mocks and stay the same.

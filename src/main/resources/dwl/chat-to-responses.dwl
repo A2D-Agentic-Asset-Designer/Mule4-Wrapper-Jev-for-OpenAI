@@ -8,7 +8,18 @@ var tc = m.tool_calls default []
 var text = (m.content default "") as String
 fun id(prefix) = prefix ++ (uuid() replace "-" with "")
 var msg = { "type": "message", id: id("msg_"), status: "completed", role: "assistant", content: [{ "type": "output_text", text: text, annotations: [], logprobs: [] }] }
-var calls = tc map ((t) -> { "type": "function_call", id: id("fc_"), call_id: t.id default id("call_"), name: t.function.name, arguments: t.function.arguments default "{}", status: "completed" })
+// Calls to a custom tool of the request (e.g. a v1 broker's A2A agent) go back as custom_tool_call with the free-text input.
+var customNames = ((q.tools default []) filter ((t) -> t."type" == "custom")) map ((t) -> t.name)
+fun customInput(args) = do {
+  var a = if (args is String) (read(args, "application/json") default {}) else (args default {})
+  ---
+  if (a is Object) ((a."input" default write(a, "application/json", { indent: false })) as String) else (a as String)
+}
+var calls = tc map ((t) ->
+  if (customNames contains t.function.name)
+    { "type": "custom_tool_call", id: id("ctc_"), call_id: t.id default id("call_"), name: t.function.name, "input": customInput(t.function.arguments default "{}"), status: "completed" }
+  else
+    { "type": "function_call", id: id("fc_"), call_id: t.id default id("call_"), name: t.function.name, arguments: t.function.arguments default "{}", status: "completed" })
 ---
 {
   id: id("resp_"),

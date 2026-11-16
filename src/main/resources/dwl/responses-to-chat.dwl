@@ -24,14 +24,26 @@ var msgs = (items reduce ((it, acc = []) ->
     case "message" -> acc << { role: if (it.role == "developer") "system" else it.role, content: txt(it.content) }
     case "function_call" -> addCall(acc, { id: it.call_id, "type": "function", function: { name: it.name, arguments: it.arguments default "{}" } })
     case "function_call_output" -> acc << { role: "tool", tool_call_id: it.call_id, content: txt(it."output") }
+    case "custom_tool_call" -> addCall(acc, { id: it.call_id, "type": "function", function: { name: it.name, arguments: write({ "input": (it."input" default "") as String }, "application/json", { indent: false }) } })
+    case "custom_tool_call_output" -> acc << { role: "tool", tool_call_id: it.call_id, content: txt(it."output") }
     else -> acc
   })) default []
-var tools = ((r.tools default []) filter ((t) -> t."type" == "function")) map ((t) -> {
-  "type": "function",
-  function: { name: t.name, (description: t.description) if (t.description != null), parameters: t.parameters default { "type": "object", properties: {} } }
-})
+// Function tools pass through. Custom tools (free-text input; the v1 broker sends its linked A2A agents this way)
+// become function tools with one string argument "input"; chat-to-responses.dwl turns the call back into a custom_tool_call.
+var tools = ((r.tools default []) filter ((t) -> t."type" == "function" or t."type" == "custom")) map ((t) ->
+  if (t."type" == "custom") {
+    "type": "function",
+    function: {
+      name: t.name,
+      (description: t.description) if (t.description != null),
+      parameters: { "type": "object", properties: { "input": { "type": "string", description: "The request for this tool, in plain natural language" } }, required: ["input"] }
+    }
+  } else {
+    "type": "function",
+    function: { name: t.name, (description: t.description) if (t.description != null), parameters: t.parameters default { "type": "object", properties: {} } }
+  })
 var tc = r.tool_choice
-var toolChoice = if (tc is String) tc else if (tc is Object and tc."type" == "function") { "type": "function", function: { name: tc.name } } else null
+var toolChoice = if (tc is String) tc else if (tc is Object and (tc."type" == "function" or tc."type" == "custom")) { "type": "function", function: { name: tc.name } } else null
 var f = r.text.format default null
 var rf = if (f == null) null
   else if (f."type" == "json_schema") { "type": "json_schema", json_schema: { name: f.name default "output", schema: f.schema, strict: f.strict default false } }

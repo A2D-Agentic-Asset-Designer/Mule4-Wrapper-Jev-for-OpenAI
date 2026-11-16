@@ -28,7 +28,7 @@ OpenAI-shaped chat.completion (or SSE stream)
 | Method | Path | What it does |
 | --- | --- | --- |
 | POST | `/v1/chat/completions` | OpenAI Chat Completions: messages, tools, tool_choice and stream are supported |
-| POST | `/v1/responses` | OpenAI Responses API (what Agent Fabric brokers call): instructions, input messages, function_call / function_call_output items, function tools, tool_choice, text.format and stream. It is mapped onto the same Jev pipeline |
+| POST | `/v1/responses` | OpenAI Responses API (what Agent Fabric brokers call): instructions, input messages, function_call / function_call_output and custom_tool_call / custom_tool_call_output items, function tools and custom tools, tool_choice, text.format and stream. It is mapped onto the same Jev pipeline |
 | GET | `/v1/models` | Lists the fallback model and `jev` |
 | GET | `/health` | `{"status":"UP"}` |
 | any | anything else | 404 with an OpenAI-style error |
@@ -56,7 +56,7 @@ You need Java 17 and Maven, plus a Mule 4.9 runtime (standalone, or the one bund
 
 ```bash
 mvn -DskipTests package
-cp target/jev-openai-wrapper-1.0.1-mule-application.jar $MULE_HOME/apps/
+cp target/jev-openai-wrapper-1.1.0-mule-application.jar $MULE_HOME/apps/
 $MULE_HOME/bin/mule -M-Dopenrouter.apiKey="$OPENROUTER_API_KEY" -M-Dhttp.port=8091
 ```
 
@@ -79,7 +79,7 @@ Publish to Exchange with your org id as the group id, then deploy with the key a
 mvn -DgroupId=<org-id> -DskipTests deploy          # needs Exchange credentials in ~/.m2/settings.xml (server id anypoint-exchange-v3)
 
 anypoint-cli-v4 runtime-mgr application deploy jev-openai-wrapper cloudhub-us-east-2 4.9.24:10-java17 jev-openai-wrapper \
-  --groupId <org-id> --assetVersion 1.0.1 --javaVersion 17 \
+  --groupId <org-id> --assetVersion 1.1.0 --javaVersion 17 \
   --secureProperty "openrouter.apiKey=$OPENROUTER_API_KEY" \
   --secureProperty "wrapper.apiKey=$WRAPPER_API_KEY"
 ```
@@ -118,7 +118,7 @@ context:
 - `stream: true` is supported on both APIs, but the reply arrives as one chunk after the model has finished (no token streaming).
 - Jev only picks **one** next action, so each turn has at most one tool call (`parallel_tool_calls: false`).
 - Each call costs one Jev decision (about $0.00002) plus the fallback model's tokens.
-- The Chat Completions and Responses APIs are served. Embeddings and images are not. On `/v1/responses` only function tools are passed on (no built-in tools such as web search), and `previous_response_id` is not stored: send the whole conversation.
+- The Chat Completions and Responses APIs are served. Embeddings and images are not. On `/v1/responses` function tools and custom tools are passed on, but built-in tools such as web search are not. Jev sees a custom tool as a function with one string argument `input`, and the call goes back to the caller as a `custom_tool_call`. The v1 broker sends its linked A2A agents as custom tools, so wrapper 1.1.0 or later is needed for a v1 broker to call its agents, and `previous_response_id` is not stored: send the whole conversation.
 
 ## Security
 
