@@ -51,22 +51,74 @@ Test data in the mocks: book Dune (BK-1001, out), The Hobbit (BK-2002, available
 
 1. Open the command palette and run **Octoloom: New agent network**. You can also click **+** in the Projects view.
 2. Under **1 Network style**, pick **Probabilistic Network** (Agent Network 1.0, A2A 0.3.0).
-3. Under **2 Start from**, pick **Blank**. Enter the broker name `jev_lib1_library-broker`.
+3. Under **2 Start from**, pick **Blank**. Leave **Add a starter broker** off: you add the broker on the canvas in Step 2.
 4. Under **3 Project**, name the project `jev-library-loans-v1` and pick a parent folder.
 5. Click **Create blank project**.
 
-![New agent network dialog with Probabilistic Network and Blank selected](images/v1-00-new-project.png)
+![New agent network dialog with Probabilistic Network and Blank selected, starter broker off](images/v1-00-new-project.png)
 
-Octoloom writes `agent-network.yaml` and `exchange.json`, then opens the canvas with one broker card.
+Octoloom writes an empty `agent-network.yaml` (`brokers: {}`) and an `exchange.json` with your asset identity, then opens the canvas. The network is empty, and the canvas offers one button, **Add broker**.
 
-![Blank canvas with one broker card that has no LLM](images/v1-01-blank.png)
+![Empty canvas: "The network is empty" with the Add broker button](images/v1-01-empty.png)
 
-The broker shows a red mark and **No model**, and the Problems bar counts 3 errors. That is expected: the broker has no LLM yet. The errors go away as you add the pieces.
+## Step 2: add the broker and turn its LLM into the Jev wrapper
 
-Now open `exchange.json` (the **exchange.json** button in the top bar) and do two things:
+### 2a. Add the broker
 
-- Set `groupId` to **your organization id**.
-- Add the variables the network uses, under `metadata.variables` (or copy them from [`examples/v1-library-loans/exchange.json`](../../examples/v1-library-loans/exchange.json)):
+Click **Add broker**. Octoloom adds `my-broker`, an LLM broker whose LLM is `openai` with the model `gpt-5-mini`, and draws the `openai` provider next to it.
+
+![Canvas after Add broker: the openai LLM provider linked to my-broker](images/v1-02-broker-added.png)
+
+The `openai` card has no platform and no URL yet, because the broker only *refers* to `openai`. The Problems bar shows one info: `LLM "openai" is not declared in llmProviders`. You define it now.
+
+### 2b. Define the LLM provider and its connection
+
+Click the blue **+** (**Add to the network**) at the top left of the canvas, then **LLM provider → OpenAI** (under *Templates*).
+
+![Add menu with LLM provider open: Empty, OpenAI, Azure OpenAI, Google Gemini, LLM through a gateway](images/v1-add-menu.png)
+
+Octoloom defines the provider `openai` and its connection `openai-connection` (`https://api.openai.com/v1`, API key `${openai.apiKey}`). The broker's reference now resolves and the Problems bar says **No problems**.
+
+![The OpenAI provider is defined, with openai-connection, and linked to my-broker](images/v1-02b-openai-defined.png)
+
+### 2c. Point it at the Jev wrapper
+
+The wrapper speaks the OpenAI API, so you keep the provider and change where it points. With the provider selected, set in the inspector:
+
+- **Key**: `jev_lib1_jev`. Renaming updates every reference, so the broker's LLM follows.
+- **Label**: `Jev OpenAI Wrapper`
+- **Description**: `Mule 4 wrapper with the OpenAI Chat Completions API; Jev (OpenRouter) decides the tool call.`
+- **Platform**: keep `OpenAI`
+- **Models**: remove `gpt-5-mini` and `gpt-5`, add `openai/gpt-4o-mini`
+
+> **Why `openai/gpt-4o-mini` and not `~typesafe/jev-latest`?** The model field picks the model that *writes* the text and the tool arguments. Jev (`~typesafe/jev-latest`) *decides* which tool or agent comes next. The wrapper always runs it first, so you never enter it here, and it can't write text. See [Jev decides, gpt-4o-mini writes](README.md#jev-decides-gpt-4o-mini-writes).
+
+Then click the connection chip (`openai-connection`) and set:
+
+- **Key**: `jev-lib1-llm-connection`
+- **URL**: `${jevWrapper.url}` (the wrapper base URL, ending in `/v1/`)
+- **API key**: `${jev.apiKey}` (a variable, so the key is passed only at deploy time)
+- **Timeout**: `600000`
+
+Finally, select the broker and set:
+
+- **Key**: `jev_lib1_library-broker`
+- **Card**: name `jev_lib1_library-broker`, URL `${ingressgw.url}/jev_lib1_library-broker` (the URL does not follow the key, so change it too), protocol version `0.3.0`, and the description `Library members ask for a book; the broker searches the catalog, checks the member and places a hold or suggests similar books.`
+- **LLM model**: `openai/gpt-4o-mini`
+
+![The Jev OpenAI Wrapper provider: openai/gpt-4o-mini, connection jev-lib1-llm-connection with URL ${jevWrapper.url}](images/v1-03-llm.png)
+
+The broker footer now shows `openai/gpt-4o-mini`, and the LLM row shows **Jev OpenAI Wrapper**.
+
+> Never type the real wrapper key into a field. Octoloom writes field values into `agent-network.yaml`. Use `${jev.apiKey}` and give the key at deploy time.
+
+### 2d. Fill in exchange.json
+
+Open `exchange.json` (the **exchange.json** button in the top bar):
+
+- Check `groupId`. Octoloom fills it with the organization id of your Anypoint login. If it's empty or shows `<enter-your-org-id>`, enter **your organization id**.
+- Declare the variables under `metadata.variables` (or copy them from [`examples/v1-library-loans/exchange.json`](../../examples/v1-library-loans/exchange.json)). The Problems bar warns about each variable the network uses but `exchange.json` doesn't declare, and its **Add to exchange.json** fix declares it with an empty default.
+- The OpenAI template declared `openai.apiKey`. The network no longer uses it, so the Problems bar offers **Remove it**.
 
 | Variable | Secret | Default |
 | --- | --- | --- |
@@ -77,36 +129,9 @@ Now open `exchange.json` (the **exchange.json** button in the top bar) and do tw
 | `membershipAgent.url` | no | `https://www.a2d-ai.com/api/platform/9c75f4b5-449f-4fb3-a0e7-d229cb97cd3c/a2a` |
 | `recommendationAgent.url` | no | `https://www.a2d-ai.com/api/platform/5e0bb263-9aef-4f38-826e-f7072f2a7764/a2a` |
 
-## Step 2: add the Jev wrapper as the LLM provider
-
-Click the blue **+** (**Add to the network**) at the top left of the canvas. The menu lists everything you can add.
-
-![Add menu: Broker, Agent, MCP server, LLM provider, Connection, Open Asset Palette](images/v1-add-menu.png)
-
-1. Pick **LLM provider**.
-2. In the inspector on the right, set:
-   - **Key**: `jev_lib1_jev`
-   - **Label**: `Jev OpenAI Wrapper`
-   - **Platform**: `OpenAI` (the wrapper speaks the OpenAI API)
-   - **Models**: `openai/gpt-4o-mini`
-
-   > **Why `openai/gpt-4o-mini` and not `~typesafe/jev-latest`?** The model field picks the model that *writes* the text and the tool arguments. Jev (`~typesafe/jev-latest`) *decides* which tool or agent comes next. The wrapper always runs it first, so you never enter it here, and it can't write text. See [Jev decides, gpt-4o-mini writes](README.md#jev-decides-gpt-4o-mini-writes).
-
-3. Add a **connection** for it, `jev-lib1-llm-connection`, with:
-   - **URL**: `${jevWrapper.url}` (the wrapper base URL, ending in `/v1/`)
-   - **API key**: `${jev.apiKey}` (a variable, so the key is passed only at deploy time)
-   - **Timeout**: `600000`
-4. Drag from the provider's **Model** port to the broker's **LLM** port, or pick the provider in the broker's LLM field.
-
-![LLM provider inspector for the Jev OpenAI Wrapper, linked to the broker](images/v1-02-llm.png)
-
-The broker's LLM row now shows **Jev OpenAI Wrapper**. In the broker inspector, set the model to `openai/gpt-4o-mini`.
-
-> Never type the real wrapper key into a field. Octoloom writes field values into `agent-network.yaml`. Use `${jev.apiKey}` and give the key at deploy time.
-
 ## Step 3: add the Library Catalog MCP server
 
-1. Click **+** and pick **MCP server**.
+1. Click **+** and pick **MCP server → Empty**.
 2. Set:
    - **Key**: `jev_lib1_catalog-mcp`
    - **Label**: `Library Catalog MCP`
@@ -118,13 +143,13 @@ The broker's LLM row now shows **Jev OpenAI Wrapper**. In the broker inspector, 
 4. Add its connection `jev-lib1-catalog-mcp-connection` with URL `${catalogMcp.url}`. It resolves to the A2D mock `https://www.a2d-ai.com/api/platform/9b2edd04-bf9a-4b09-8b7f-c31d5802585a/`.
 5. Link it to the broker: drag from the broker's pink **MCP servers** port to the MCP card. In the broker, the allowed tools are `search_books` and `place_hold`.
 
-![MCP server inspector for the Library Catalog MCP, linked to the broker](images/v1-03-mcp.png)
+![MCP server inspector for the Library Catalog MCP, linked to the broker](images/v1-04-mcp.png)
 
 The tool descriptions matter. Jev reads them to decide which tool fits the request.
 
 ## Step 4: add the two A2A agents
 
-Add each agent with **+ → Agent**:
+Add each agent with **+ → Agent → Empty**:
 
 | Field | Membership agent | Recommendation agent |
 | --- | --- | --- |
@@ -139,15 +164,15 @@ Add each agent with **+ → Agent**:
 
 Copy the card's skills from the example if you want the same details. Then drag from the broker's blue **Agents** port to each agent card.
 
-![Full network: Jev LLM, broker, two agents and the MCP server, no problems](images/v1-04-agents.png)
+![Full network: Jev LLM, broker, two agents and the MCP server, no problems](images/v1-05-agents.png)
 
 The Problems bar now says **No problems**.
 
 ## Step 5: write the broker instructions and limits
 
-Click the broker card to open its inspector.
+Click the broker card to open its inspector. **Add broker** gave it one instruction (`You are a helpful broker.`) and the default limits (25 loops, 60 s). Replace both.
 
-![Broker inspector of jev_lib1_library-broker](images/v1-05-broker.png)
+![Broker inspector of jev_lib1_library-broker](images/v1-06-broker.png)
 
 Set the **instructions**, one rule per line:
 
@@ -162,13 +187,13 @@ When the member asks for ideas, ask the Book Recommendation agent for similar bo
 
 Set the **limits**: 15 loops, 3 consecutive errors, 120 s task timeout.
 
-Check the broker card itself too. Its URL is `${ingressgw.url}/jev_lib1_library-broker`, its protocol version is `0.3.0`, and it has a skill such as "Borrow a Book".
+Check the broker card itself too (you set it in Step 2c). Its URL is `${ingressgw.url}/jev_lib1_library-broker`, its protocol version is `0.3.0`, and it has a skill such as "Borrow a Book".
 
 ## Step 6: check the YAML
 
 Click **Code** in the top bar. The text is the source of truth: every canvas edit lands here, and edits here show up on the canvas.
 
-![Code view of agent-network.yaml, in sync with the file](images/v1-06-code.png)
+![Code view of agent-network.yaml, in sync with the file](images/v1-07-code.png)
 
 Compare it with [`examples/v1-library-loans/agent-network.yaml`](../../examples/v1-library-loans/agent-network.yaml). Click **Save**.
 
@@ -182,7 +207,7 @@ Compare it with [`examples/v1-library-loans/agent-network.yaml`](../../examples/
    - `jevWrapper.url:https://<your-cloudhub-wrapper-deployment-url>/v1/` (your wrapper; the default is only a placeholder)
 5. Keep **Tracing**, **Wait until the network is ready** and **Publish before deploy** on. Click **Deploy**.
 
-![Deploy form with gateway, jev.apiKey secret and options](images/v1-07-deploy.png)
+![Deploy form with gateway, jev.apiKey secret and options](images/v1-08-deploy.png)
 
 Octoloom builds and publishes the asset to Exchange, then deploys it. The CLI equivalent is in the [example README](../../examples/v1-library-loans/README.md#deploy).
 
@@ -190,7 +215,7 @@ Octoloom builds and publishes the asset to Exchange, then deploys it. The CLI eq
 
 When the status light is green, open the chat on the broker. The left side shows the network read-only. The right side is the chat.
 
-![Chat with the Library Broker: blocked member, a hold for M-501, recommendations](images/v1-08-chat.png)
+![Chat with the Library Broker: blocked member, a hold for M-501, recommendations](images/v1-09-chat.png)
 
 Try these prompts:
 

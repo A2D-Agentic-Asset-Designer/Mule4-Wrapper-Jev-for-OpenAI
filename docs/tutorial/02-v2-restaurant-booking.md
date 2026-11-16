@@ -51,21 +51,65 @@ Test data in the mocks: `find_table` returns table T-12 by the window for up to 
 
 1. Run **Octoloom: New agent network**.
 2. Under **1 Network style**, pick **Deterministic Network** (Agent Network 2.0, AgentScript flows).
-3. Under **2 Start from**, pick **Blank**. Enter the broker name `booking broker`.
+3. Under **2 Start from**, pick **Blank**. Leave **Add a starter broker** off: you add the broker on the canvas in Step 2.
 4. Name the project `jev-restaurant-booking-v2` and click **Create blank project**.
 
-![New agent network dialog with Deterministic Network and Blank selected](images/v2-00-new-project.png)
+![New agent network dialog with Deterministic Network and Blank selected, starter broker off](images/v2-00-new-project.png)
 
-You get `agent-network.yaml`, `exchange.json` and `brokers/booking-broker.agent`, a flow with a trigger and an echo reply.
+You get an empty `agent-network.yaml` (`brokers: {}`) and an `exchange.json`. The canvas says the network is empty and offers **Add broker**.
 
-![Blank v2 canvas with one AgentScript broker](images/v2-01-blank.png)
+![Empty v2 canvas with the Add broker button](images/v2-01-empty.png)
 
-In the broker inspector, set the key to `jev_rb2_booking_broker`, the card name to `Jev Restaurant Booking Broker` and the description to `Book a restaurant table with allergy-safe menu advice and loyalty perks.`
+## Step 2: add the broker and turn its LLM into the Jev wrapper
+
+### 2a. Add the broker
+
+Click **Add broker**. Octoloom adds the AgentScript broker `my_broker` and creates its flow `brokers/my_broker.agent`: a trigger, one `assistant` step and an echo reply. The flow's LLM points to `llm://openai_connection` with the model `gpt-5-mini`.
+
+![v2 canvas after Add broker: My Broker with its flow ./brokers/my_broker.agent](images/v2-02-broker-added.png)
+
+The broker's LLM row says **not set**, because the network has no `openai_connection` yet.
+
+### 2b. Define the LLM and its connection
+
+Click **+** (**Add to the network**), then **LLM provider → OpenAI**. Octoloom adds the LLM `openai` to the registry and the connection `openai_connection` (`https://api.openai.com/v1`, API key `${openai.apiKey}`). The flow already targets that connection, so the broker card now shows **OpenAI** as its LLM.
+
+![The OpenAI LLM with openai_connection, linked to My Broker](images/v2-02b-openai-defined.png)
+
+### 2c. Point it at the Jev wrapper
+
+With the LLM selected, set:
+
+- **Key**: `jev_rb2_jev`
+- **Label**: `Jev OpenAI Wrapper`
+- **Platform**: keep `OpenAI`
+- **Models**: remove `gpt-5-mini` and `gpt-5`, add `openai/gpt-4o-mini`
+- **Input format**: leave it empty
+
+> **Why `openai/gpt-4o-mini` and not `~typesafe/jev-latest`?** The model field picks the model that *writes* the text and the tool arguments. Jev (`~typesafe/jev-latest`) *decides* which tool or agent comes next. The wrapper always runs it first, so you never enter it here, and it can't write text. See [Jev decides, gpt-4o-mini writes](README.md#jev-decides-gpt-4o-mini-writes).
+
+Click the connection chip (`openai_connection`) and set:
+
+- **Key**: `jev_rb2_llm_connection`. Renaming a v2 connection also updates the targets in the broker flows, so `llm://openai_connection` in the `.agent` file becomes `llm://jev_rb2_llm_connection`.
+- **URL**: `${jevWrapper.url}`
+- **Authentication**: `apiKey`, value `${jev.apiKey}`
+
+![LLM inspector for the Jev OpenAI Wrapper in the v2 network](images/v2-03-llm.png)
+
+Select the broker and set:
+
+- **Key**: `jev_rb2_booking_broker`. Octoloom then asks whether to rename the flow file to match it. Either answer works. The example keeps the shorter `brokers/booking-broker.agent`, so if you want the same files, pick **Keep name** and rename the file in the Explorer later, then update **Flow** on the broker.
+- **Card name**: `Jev Restaurant Booking Broker`
+- **Description**: `Book a restaurant table with allergy-safe menu advice and loyalty perks.`
+
+The broker footer says **No model** until Step 4. In a v2 network, the flow chooses the model.
+
+### 2d. Fill in exchange.json
 
 In `exchange.json`:
 
-- Set `groupId` to **your organization id**.
-- Add the variables under `metadata.variables` (or copy them from [`examples/v2-restaurant-booking/exchange.json`](../../examples/v2-restaurant-booking/exchange.json)):
+- Check `groupId`. Octoloom fills it with the organization id of your Anypoint login. If it's empty or shows `<enter-your-org-id>`, enter **your organization id**.
+- Declare the variables under `metadata.variables` (or copy them from [`examples/v2-restaurant-booking/exchange.json`](../../examples/v2-restaurant-booking/exchange.json)). The Problems bar flags each variable the network uses but doesn't declare (fix: **Add to exchange.json**), and offers **Remove it** for `openai.apiKey`, which the network no longer uses.
 
 | Variable | Secret | Default |
 | --- | --- | --- |
@@ -75,29 +119,9 @@ In `exchange.json`:
 | `menuAgent.url` | no | `https://www.a2d-ai.com/api/platform/dfb5bd9b-cf76-4847-99bf-00273c063af7/a2a` |
 | `loyaltyAgent.url` | no | `https://www.a2d-ai.com/api/platform/2597660f-31fc-4ef7-b08c-91c7c372d2a4/a2a` |
 
-## Step 2: add the Jev wrapper as the LLM
-
-1. Click **+** (**Add to the network**) and pick **LLM provider**.
-2. Set:
-   - **Key**: `jev_rb2_jev`
-   - **Label**: `Jev OpenAI Wrapper`
-   - **Platform**: `OpenAI`
-   - **Models**: `openai/gpt-4o-mini`
-   - **Input format**: leave it empty
-
-   > **Why `openai/gpt-4o-mini` and not `~typesafe/jev-latest`?** The model field picks the model that *writes* the text and the tool arguments. Jev (`~typesafe/jev-latest`) *decides* which tool or agent comes next. The wrapper always runs it first, so you never enter it here, and it can't write text. See [Jev decides, gpt-4o-mini writes](README.md#jev-decides-gpt-4o-mini-writes).
-3. Add the connection `jev_rb2_llm_connection` with:
-   - **URL**: `${jevWrapper.url}`
-   - **Authentication**: `apiKey`, value `${jev.apiKey}`
-4. Link the LLM to the broker.
-
-![LLM provider inspector for the Jev OpenAI Wrapper in the v2 network](images/v2-02-llm.png)
-
-The broker footer still says **No model**. In a v2 network, the flow chooses the model, and you set it in Step 4.
-
 ## Step 3: add the MCP server and the agents
 
-**+ → MCP server**:
+**+ → MCP server → Empty**:
 
 - **Key** `jev_rb2_tables_mcp`, **label** `Restaurant Tables MCP`, **description** `Restaurant table booking: find and book tables.`
 - **Transport**: `streamableHttp`, path `/mcp`, protocol version `2025-06-18`
@@ -106,7 +130,7 @@ The broker footer still says **No model**. In a v2 network, the flow chooses the
   - `book_table`: book a table that `find_table` returned. Inputs `table_id` and `name` (required) and `time`.
 - **Connection** `jev_rb2_tables_mcp_connection`, URL `${tablesMcp.url}` (the A2D mock `https://www.a2d-ai.com/api/platform/8552e021-0a18-4ca8-979d-729ef0e71273/`)
 
-**+ → Agent**, twice:
+**+ → Agent → Empty**, twice:
 
 | Field | Menu agent | Loyalty agent |
 | --- | --- | --- |
@@ -118,17 +142,17 @@ The broker footer still says **No model**. In a v2 network, the flow chooses the
 | A2D endpoint (variable default) | `https://www.a2d-ai.com/api/platform/dfb5bd9b-cf76-4847-99bf-00273c063af7/a2a` | `https://www.a2d-ai.com/api/platform/2597660f-31fc-4ef7-b08c-91c7c372d2a4/a2a` |
 | Card `supportedInterfaces` | same URL, `JSONRPC`, `"1.0"` | same URL, `JSONRPC`, `"1.0"` |
 
-![Network with the LLM, the broker, two agents and the MCP server, not yet linked](images/v2-03-upstreams.png)
+![Network with the LLM, the broker, two agents and the MCP server, not yet linked](images/v2-04-upstreams.png)
 
 The upstream cards show **Link to Jev Restaurant B...**, and the broker says "2 available: click Edit to link". In a v2 network, the links come from the flow. As soon as the flow uses a connection, the card shows it as linked.
 
 ## Step 4: write the AgentScript flow
 
-Click **Flow** on the broker card. You can also open `brokers/booking-broker.agent`. The flow canvas opens.
+Click **Flow** on the broker card. You can also open the `.agent` file. The flow canvas opens. It still has the starter steps from **Add broker** (trigger, `assistant`, echo reply) and the model `gpt-5-mini`. You replace them now.
 
-![AgentScript flow: Booking Broker Trigger, Book Table orchestrator with four actions, Done reply](images/v2-04-flow.png)
+![AgentScript flow: Booking Broker Trigger, Book Table orchestrator with four actions, Done reply](images/v2-05-flow.png)
 
-Build three nodes:
+Remove the `assistant` step, then build three nodes:
 
 1. **Trigger** `bookingBrokerTrigger` (kind `a2a`, target `brokers://jev_rb2_booking_broker/a2a`). On a message it moves to the orchestrator.
 2. **Orchestrator** `book` (label **Book Table**). Drag **Orchestrator** from *Drag to canvas*, then give it:
@@ -138,7 +162,7 @@ Build three nodes:
    - on exit, a move to the reply
 3. **Reply** `done`. It sends the orchestrator's output as a completed A2A 1.0 status update.
 
-Under **Settings → Agent Settings** and **Connections**, declare the LLM and the four actions so they point to the connections from Steps 2 and 3. The whole file:
+Under **Settings → Agent Settings** and **Connections**, declare the LLM and the four actions so they point to the connections from Steps 2 and 3. Set the LLM model to `openai/gpt-4o-mini`. The whole file:
 
 ```yaml
 # @dialect: AGENTFABRIC=1.0
@@ -212,7 +236,7 @@ The Problems bar says **No problems**. Click **Save**.
 
 Go back to the network (**Network** in the top bar). Every upstream is now linked to the broker through the flow.
 
-![Full v2 network: every upstream linked to Jev Restaurant Booking](images/v2-05-network.png)
+![Full v2 network: every upstream linked to Jev Restaurant Booking](images/v2-06-network.png)
 
 Compare `agent-network.yaml` with [the example](../../examples/v2-restaurant-booking/agent-network.yaml) in the **Code** view.
 
@@ -224,7 +248,7 @@ Compare `agent-network.yaml` with [the example](../../examples/v2-restaurant-boo
 4. Add `jevWrapper.url:https://<your-cloudhub-wrapper-deployment-url>/v1` (your wrapper; the default is only a placeholder) under **Deployment properties**.
 5. Click **Deploy**.
 
-![Deploy form for the v2 project](images/v2-06-deploy.png)
+![Deploy form for the v2 project](images/v2-07-deploy.png)
 
 The first start of a v2 broker can take several minutes. If you change `exchange.json` after a build, delete `target/` before you deploy again. Connection keys must be unique in an environment: for a second copy, rename the `jev_rb2_` prefix, or the deploy fails with a 409.
 
@@ -232,7 +256,7 @@ The first start of a v2 broker can take several minutes. If you change `exchange
 
 Open the chat on the broker (A2A 1.0).
 
-![Chat with the Jev Restaurant Booking Broker: booking RSV-5521, nut-free dishes, Gold perks](images/v2-07-chat.png)
+![Chat with the Jev Restaurant Booking Broker: booking RSV-5521, nut-free dishes, Gold perks](images/v2-08-chat.png)
 
 | Prompt | Expected result |
 | --- | --- |

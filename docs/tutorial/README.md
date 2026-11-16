@@ -16,7 +16,7 @@ You need:
 1. **The Jev wrapper running**, version 1.0.1 or later (v2 brokers need `/v1/responses`). See the [main README](../../README.md) to build and deploy it. Note two things:
    - its public URL, for example `https://<your-cloudhub-wrapper-deployment-url>` (the brokers use it with `/v1/` or `/v1` at the end)
    - its caller key `wrapper.apiKey` (a secret: keep it in an environment variable, never in a file)
-2. **VS Code with Octoloom for Agent Fabric** installed.
+2. **VS Code with Octoloom for Agent Fabric** installed. The steps and screenshots match the 0.9.25 build (`octoloom-local-checks-0925.vsix`): a blank project starts empty, and **Add broker** on the canvas adds the first broker with an `openai` LLM.
 3. **`anypoint-cli-v4`** with the `agent-network` plugin, logged in to your Anypoint organization. Octoloom runs it for you on build and deploy.
 4. **An Agent Fabric gateway** in your environment. You need its name and its public URL.
 5. **Your organization id.** Each project's `exchange.json` uses it as `groupId`. The examples have the placeholder `<enter-your-org-id>`, and the build fails until you replace it.
@@ -61,7 +61,7 @@ The broker sees the wrapper as an ordinary **OpenAI** LLM provider. Jev decides 
 
 ## About the screenshots
 
-The screenshots were made with Octoloom's screenshot harness, in the dark theme. Your gateway name, URLs and organization will be different. The gateway in the pictures is called `my-gateway`. The chat replies are real answers from the deployed examples (wrapper 1.2.0, tested 2026-11-16).
+The screenshots were made with Octoloom's screenshot harness from the 0.9.25 build (`octoloom-local-checks-0925.vsix`), in the dark theme. Your gateway name, URLs and organization will be different. The gateway in the pictures is called `my-gateway`. The chat replies are real answers from the deployed examples (wrapper 1.2.0, tested 2026-11-16).
 
 A small round **i** button sits at the bottom right of every Octoloom view. It opens the **Explain** panel for whatever you are looking at. Use it whenever a field is unclear.
 
@@ -80,9 +80,13 @@ A small round **i** button sits at the bottom right of every Octoloom view. It o
 
 ## Regenerating the screenshots
 
-[`tools/make-specs.py`](tools/make-specs.py) writes the screenshot specs from the example files. Run it from an Octoloom checkout:
+[`tools/make-specs.py`](tools/make-specs.py) writes the screenshot specs from the example files. Render them with Octoloom's harness (`.claude/skills/octoloom-screenshot/shot.mjs`) against the build the tutorial describes. The harness reads `dist/` and `media/` from the checkout it lives in, so point it at the unpacked vsix:
 
 ```bash
+mkdir -p /tmp/octo && unzip -q octoloom-local-checks-0925.vsix -d /tmp/octo
+sed "s#^const repo = .*#const repo = '/tmp/octo/extension';#" <octoloom-checkout>/.claude/skills/octoloom-screenshot/shot.mjs > /tmp/shot.mjs
 python3 <this-repo>/docs/tutorial/tools/make-specs.py <this-repo> /tmp/jevtut/specs
-OUT=/tmp/jevtut/shots node .claude/skills/octoloom-screenshot/shot.mjs /tmp/jevtut/specs/*.json
+OUT=/tmp/jevtut/shots node /tmp/shot.mjs /tmp/jevtut/specs/*.json
 ```
+
+Copy the `-dark.png` files to `images/` without the `-dark` suffix.
