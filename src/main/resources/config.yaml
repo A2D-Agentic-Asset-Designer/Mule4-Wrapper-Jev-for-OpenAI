@@ -11,7 +11,9 @@ openrouter:
 jev:
   enabled: "true"
   model: "~typesafe/jev-latest"
-  path: "/alpha/decisions"
+  # The TypeSafe Connector calls OpenRouter's systemOne endpoint: {baseUrl}/v1/systemone.
+  baseUrl: "https://openrouter.ai/api"
+  timeoutMs: "30000"
   # Below this confidence the fallback model decides on its own (tool_choice auto).
   minConfidence: "0.5"
   # How many of the last messages Jev sees, and how many characters per message.

@@ -2,11 +2,13 @@
 <mule xmlns="http://www.mulesoft.org/schema/mule/core"
       xmlns:http="http://www.mulesoft.org/schema/mule/http"
       xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:typesafe="http://www.mulesoft.org/schema/mule/typesafe"
       xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
       xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
         http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+        http://www.mulesoft.org/schema/mule/typesafe http://www.mulesoft.org/schema/mule/typesafe/current/mule-typesafe.xsd">
 
   <!-- OpenAI-compatible chat completions in front of Typesafe Jev (decides the tool call) and a fallback chat model (writes the text). -->
   <configuration-properties file="config.yaml" doc:name="Defaults (no secrets)"/>
@@ -23,6 +25,11 @@
       <http:default-header key="X-Title" value="Mule4 Jev wrapper for OpenAI"/>
     </http:default-headers>
   </http:request-config>
+
+  <!-- Jev through the TypeSafe Connector (OpenRouter route, same OpenRouter key). -->
+  <typesafe:config name="jev" doc:name="TypeSafe (Jev)">
+    <typesafe:openrouter-connection apiKey="${openrouter.apiKey}" model="${jev.model}" baseUrl="${jev.baseUrl}" responseTimeoutMs="${jev.timeoutMs}" appTitle="Mule4 Jev wrapper for OpenAI"/>
+  </typesafe:config>
 
   <!-- GET /health: liveness, no upstream call. -->
   <flow name="health">
@@ -152,13 +159,13 @@
           <ee:variables><ee:set-variable variableName="jevBody" resource="dwl/jev-request.dwl"/></ee:variables>
         </ee:transform>
         <try doc:name="Jev decision">
-          <http:request method="POST" config-ref="openrouter" path="${jev.path}" doc:name="Jev (OpenRouter Decisions)">
-            <http:body><![CDATA[#[vars.jevBody]]]></http:body>
-          </http:request>
-          <set-variable variableName="jev" value="#[payload]" mimeType="application/json"/>
+          <typesafe:evaluate config-ref="jev" step="next_action" target="jev" doc:name="[Decide] Evaluate (Jev)">
+            <typesafe:state><![CDATA[#[vars.jevBody.state]]]></typesafe:state>
+            <typesafe:questions><![CDATA[#[vars.jevBody.questions]]]></typesafe:questions>
+          </typesafe:evaluate>
           <error-handler>
             <on-error-continue doc:name="Jev failed: fallback decides">
-              <set-variable variableName="jevError" value="#[(error.errorType.identifier default 'ERROR') ++ ' ' ++ ((error.errorMessage.payload.error.message default error.description) default '')]"/>
+              <set-variable variableName="jevError" value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default 'ERROR') ++ ' ' ++ (error.description default '')]"/>
               <logger level="WARN" message="#['Jev decision failed, the fallback model decides: ' ++ vars.jevError]"/>
             </on-error-continue>
           </error-handler>

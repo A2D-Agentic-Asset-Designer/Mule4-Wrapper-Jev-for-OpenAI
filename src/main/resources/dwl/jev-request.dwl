@@ -2,6 +2,7 @@
 output application/json
 import * from dw::core::Strings
 var req = vars.req
+// Builds {model, state, questions}; the TypeSafe Connector sends state and questions (the model comes from the connection).
 var maxChars = p('jev.maxChars') as Number
 var maxMsgs = p('jev.maxMessages') as Number
 fun cut(s) = do {

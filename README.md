@@ -4,11 +4,11 @@ A small Mule 4 application that looks like an **OpenAI** endpoint (**Chat Comple
 
 The wrapper sends each request through two steps:
 
-1. **Jev decides the action.** Typesafe's decision model `~typesafe/jev-latest` runs on OpenRouter (`POST /api/alpha/decisions`). It gets the recent conversation and the tools on offer, then picks one of them or `respond_to_user`. It returns a choice with a confidence score.
+1. **Jev decides the action.** Typesafe's decision model `~typesafe/jev-latest` is called through the [TypeSafe Connector for Mule 4](https://github.com/MuleSoft-Forge/mule4-typesafe-connector) (`com.mulesoftforge:mule4-typesafe-connector`, Maven Central), on its OpenRouter route (`POST /api/v1/systemone`) with the same OpenRouter key. The `[Decide] Evaluate` operation sends the conversation as the state and one choice question. It gets the recent conversation and the tools on offer, then picks one of them or `respond_to_user`. It returns a choice with a confidence score.
 2. **A chat model writes the reply.** The fallback model (default `openai/gpt-4o-mini`, also via OpenRouter) writes the answer or the tool arguments:
    - Jev picked a tool: the tool call is forced (`tool_choice: {type: function, name}`).
    - Jev picked `respond_to_user`: the model must answer in text (`tool_choice: none`).
-   - Jev is unsure (confidence below `jev.minConfidence`), fails, or there are no tools: the model decides alone (`auto` or the caller's `tool_choice`).
+   - Jev is unsure (confidence below `jev.minConfidence`), fails (any `TYPESAFE:*` connector error, e.g. more than 255 tools), or there are no tools: the model decides alone (`auto` or the caller's `tool_choice`).
 
 Every response has a `x-jev-decision` header, for example `tool:get_order_status;confidence=1`, `respond;confidence=0.97`, `auto` or `passthrough`.
 
@@ -16,7 +16,7 @@ Every response has a `x-jev-decision` header, for example `tool:get_order_status
 client (OpenAI SDK, Agent Fabric broker)
    │  POST /v1/chat/completions
    ▼
-Mule wrapper ──► OpenRouter /api/alpha/decisions   (Jev: which tool / respond?)
+Mule wrapper ──► TypeSafe Connector ─► OpenRouter /api/v1/systemone (Jev: which tool / respond?)
    │
    └──────────► OpenRouter /api/v1/chat/completions (fallback model: text / tool args)
    ▼
@@ -79,7 +79,7 @@ Publish to Exchange with your org id as the group id, then deploy with the key a
 mvn -DgroupId=<org-id> -DskipTests deploy          # needs Exchange credentials in ~/.m2/settings.xml (server id anypoint-exchange-v3)
 
 anypoint-cli-v4 runtime-mgr application deploy jev-openai-wrapper cloudhub-us-east-2 4.9.24:10-java17 jev-openai-wrapper \
-  --groupId <org-id> --assetVersion 1.1.0 --javaVersion 17 \
+  --groupId <org-id> --assetVersion 1.2.0 --javaVersion 17 \
   --secureProperty "openrouter.apiKey=$OPENROUTER_API_KEY" \
   --secureProperty "wrapper.apiKey=$WRAPPER_API_KEY"
 ```
