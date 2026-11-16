@@ -21,7 +21,7 @@ The MCP server and the agents are public A2D mocks, so the network needs no othe
 | Variable | Secret | What to set |
 | --- | --- | --- |
 | `ingressgw.url` | no | Public URL of your gateway, e.g. `https://<gateway>.<id>.usa-e2.cloudhub.io` |
-| `jevWrapper.url` | no | Wrapper base URL ending in `/v1/` (the default is the demo deployment) |
+| `jevWrapper.url` | no | Wrapper base URL ending in `/v1/`. The default is the placeholder `https://<your-cloudhub-wrapper-deployment-url>/v1/`: replace it or pass your URL at deploy time |
 | `jev.apiKey` | **yes** | The wrapper's `wrapper.apiKey`. Pass it at deploy time; never write it in a file |
 | `catalogMcp.url`, `membershipAgent.url`, `recommendationAgent.url` | no | A2D mock URLs (already the defaults) |
 
@@ -33,7 +33,7 @@ anypoint-cli-v4 agent-network project build --path v1-library-loans
 
 anypoint-cli-v4 agent-network project deploy --path v1-library-loans -g <gateway-name> \
   --property "ingressgw.url:https://<gateway-public-url>" \
-  --property "jevWrapper.url:https://<wrapper-public-url>/v1/" \
+  --property "jevWrapper.url:https://<your-cloudhub-wrapper-deployment-url>/v1/" \
   --property "catalogMcp.url:https://www.a2d-ai.com/api/platform/9b2edd04-bf9a-4b09-8b7f-c31d5802585a/" \
   --property "membershipAgent.url:https://www.a2d-ai.com/api/platform/9c75f4b5-449f-4fb3-a0e7-d229cb97cd3c/a2a" \
   --property "recommendationAgent.url:https://www.a2d-ai.com/api/platform/5e0bb263-9aef-4f38-826e-f7072f2a7764/a2a" \

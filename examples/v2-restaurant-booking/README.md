@@ -21,7 +21,7 @@ The MCP server and the agents are public A2D mocks, so the network needs no othe
 
 | Variable | Secret | What to set |
 | --- | --- | --- |
-| `jevWrapper.url` | no | Wrapper base URL ending in `/v1` (the default is the demo deployment) |
+| `jevWrapper.url` | no | Wrapper base URL ending in `/v1`. The default is the placeholder `https://<your-cloudhub-wrapper-deployment-url>/v1`: replace it or pass your URL at deploy time |
 | `jev.apiKey` | **yes** | The wrapper's `wrapper.apiKey`. Pass it at deploy time; never write it in a file |
 | `tablesMcp.url`, `menuAgent.url`, `loyaltyAgent.url` | no | A2D mock URLs (already the defaults) |
 
@@ -32,7 +32,7 @@ cd examples
 anypoint-cli-v4 agent-network project build --path v2-restaurant-booking
 
 anypoint-cli-v4 agent-network project deploy --path v2-restaurant-booking -g <gateway-name> \
-  --property "jevWrapper.url:https://<wrapper-public-url>/v1" \
+  --property "jevWrapper.url:https://<your-cloudhub-wrapper-deployment-url>/v1" \
   --property "tablesMcp.url:https://www.a2d-ai.com/api/platform/8552e021-0a18-4ca8-979d-729ef0e71273/" \
   --property "menuAgent.url:https://www.a2d-ai.com/api/platform/dfb5bd9b-cf76-4847-99bf-00273c063af7/a2a" \
   --property "loyaltyAgent.url:https://www.a2d-ai.com/api/platform/2597660f-31fc-4ef7-b08c-91c7c372d2a4/a2a" \

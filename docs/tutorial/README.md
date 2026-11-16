@@ -14,7 +14,7 @@ Each chapter builds the same project you find in `examples/`. You can compare yo
 You need:
 
 1. **The Jev wrapper running**, version 1.0.1 or later (v2 brokers need `/v1/responses`). See the [main README](../../README.md) to build and deploy it. Note two things:
-   - its public URL, for example `https://<wrapper-app>.<id>.usa-e2.cloudhub.io`
+   - its public URL, for example `https://<your-cloudhub-wrapper-deployment-url>` (the brokers use it with `/v1/` or `/v1` at the end)
    - its caller key `wrapper.apiKey` (a secret: keep it in an environment variable, never in a file)
 2. **VS Code with Octoloom for Agent Fabric** installed.
 3. **`anypoint-cli-v4`** with the `agent-network` plugin, logged in to your Anypoint organization. Octoloom runs it for you on build and deploy.

@@ -69,7 +69,7 @@ In `exchange.json`:
 
 | Variable | Secret | Default |
 | --- | --- | --- |
-| `jevWrapper.url` | no | your wrapper URL ending in `/v1` |
+| `jevWrapper.url` | no | `https://<your-cloudhub-wrapper-deployment-url>/v1` (a placeholder: replace it or pass your URL at deploy time) |
 | `jev.apiKey` | **yes** | empty (you give the key at deploy time) |
 | `tablesMcp.url` | no | `https://www.a2d-ai.com/api/platform/8552e021-0a18-4ca8-979d-729ef0e71273/` |
 | `menuAgent.url` | no | `https://www.a2d-ai.com/api/platform/dfb5bd9b-cf76-4847-99bf-00273c063af7/a2a` |
@@ -221,7 +221,7 @@ Compare `agent-network.yaml` with [the example](../../examples/v2-restaurant-boo
 1. In **Projects & Deploy**, click the rocket on `jev-restaurant-booking-v2`.
 2. Enter your gateway name.
 3. Type the wrapper key for `jev.apiKey`.
-4. Add `jevWrapper.url:https://<wrapper-public-url>/v1` under **Deployment properties** when you don't use the demo wrapper.
+4. Add `jevWrapper.url:https://<your-cloudhub-wrapper-deployment-url>/v1` (your wrapper; the default is only a placeholder) under **Deployment properties**.
 5. Click **Deploy**.
 
 ![Deploy form for the v2 project](images/v2-06-deploy.png)

@@ -71,7 +71,7 @@ Now open `exchange.json` (the **exchange.json** button in the top bar) and do tw
 | Variable | Secret | Default |
 | --- | --- | --- |
 | `ingressgw.url` | no | empty (you give your gateway URL at deploy time) |
-| `jevWrapper.url` | no | your wrapper URL ending in `/v1/` |
+| `jevWrapper.url` | no | `https://<your-cloudhub-wrapper-deployment-url>/v1/` (a placeholder: replace it or pass your URL at deploy time) |
 | `jev.apiKey` | **yes** | empty (you give the key at deploy time) |
 | `catalogMcp.url` | no | `https://www.a2d-ai.com/api/platform/9b2edd04-bf9a-4b09-8b7f-c31d5802585a/` |
 | `membershipAgent.url` | no | `https://www.a2d-ai.com/api/platform/9c75f4b5-449f-4fb3-a0e7-d229cb97cd3c/a2a` |
@@ -179,7 +179,7 @@ Compare it with [`examples/v1-library-loans/agent-network.yaml`](../../examples/
 3. Under **Secrets**, type the wrapper key for `jev.apiKey`. Octoloom passes it with `--property` and does not store it.
 4. Under **Deployment properties**, add the values that have no default. The A2D URLs already have their defaults, so you don't need to pass them here:
    - `ingressgw.url:https://<gateway-public-url>`
-   - `jevWrapper.url:https://<wrapper-public-url>/v1/` (when you don't use the demo wrapper)
+   - `jevWrapper.url:https://<your-cloudhub-wrapper-deployment-url>/v1/` (your wrapper; the default is only a placeholder)
 5. Keep **Tracing**, **Wait until the network is ready** and **Publish before deploy** on. Click **Deploy**.
 
 ![Deploy form with gateway, jev.apiKey secret and options](images/v1-07-deploy.png)
