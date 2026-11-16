@@ -56,7 +56,7 @@ curl -s https://<gateway-public-url>/jev_rb2_booking_broker/ -H 'content-type: a
     "parts": [ { "text": "Table for 4 on 2026-11-20 at 19:30 for Maria Rossi. One guest has a nut allergy." } ] } } }'
 ```
 
-Example prompts (the results come from the mocks, tested on 2026-11-14):
+Example prompts (the results come from the mocks, tested on 2026-11-14, again on 2026-11-16 with wrapper 1.2.0):
 
 - **Table for 4 on 2026-11-20 at 19:30 for Maria Rossi. One guest has a nut allergy.**
   - Expected result:

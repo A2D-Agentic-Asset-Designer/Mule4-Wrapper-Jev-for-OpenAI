@@ -57,7 +57,7 @@ curl -s https://<gateway-public-url>/jev_lib1_library-broker/ -H 'content-type: 
     "parts": [ { "kind": "text", "text": "I am member M-501. Is Dune available? If not, please place a hold for me." } ] } } }'
 ```
 
-Example prompts (the results come from the mocks, tested on 2026-11-16 with wrapper 1.1.0):
+Example prompts (the results come from the mocks, tested on 2026-11-16 with wrapper 1.1.0, again with 1.2.0):
 
 - **I am member M-666. Please check my membership and place a hold on Dune for me.**
   - Jev's calls: `search_books`, then the **Library Membership agent**, then answer.

@@ -86,6 +86,8 @@ anypoint-cli-v4 runtime-mgr application deploy jev-openai-wrapper cloudhub-us-ea
 
 Your OpenAI base URL is then `https://<app-public-url>/v1/`.
 
+To move to a new version, run `anypoint-cli-v4 runtime-mgr application modify <deployment-id> --artifactId jev-openai-wrapper --groupId <org-id> --assetVersion <version>` and **pass both `--secureProperty` values again**. A modify without them clears the secure properties: the app then answers 401 to every call.
+
 ## Use it as the LLM of an Agent Fabric broker
 
 **v1 broker** (`agent-network.yaml`):
